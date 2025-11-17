@@ -20,8 +20,17 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Plus, Pencil, Trash2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CategorySelector } from "@/components/admin/category-selector"
+import { getCategoryPath } from "@/lib/categories"
 
 interface Product {
   id: string
@@ -29,7 +38,13 @@ interface Product {
   description: string
   price: number
   stock: number
-  category: string
+  categoryId: string
+  category: string // Full path for display
+  brand: string
+  color: string
+  size: string
+  style: string
+  stockStatus: string
 }
 
 export default function ProductsPage() {
@@ -38,9 +53,15 @@ export default function ProductsPage() {
       id: "1",
       name: "Sample Product 1",
       description: "This is a sample product description",
-      price: 99.99,
-      stock: 50,
-      category: "Electronics",
+      price: 338,
+      stock: 0,
+      categoryId: "1-1-1",
+      category: "Хувь хүнийг хамгаалах хувцас хэрэгсэл / Толгойн хамгаалалт / Малгай, каск",
+      brand: "Swootech",
+      color: "Улаан",
+      size: "S",
+      style: "Classic",
+      stockStatus: "Захиалгаар",
     },
     {
       id: "2",
@@ -48,7 +69,13 @@ export default function ProductsPage() {
       description: "Another sample product",
       price: 149.99,
       stock: 30,
-      category: "Clothing",
+      categoryId: "1-2",
+      category: "Хувь хүнийг хамгаалах хувцас хэрэгсэл / Хамгаалалтын хувцас",
+      brand: "Brand 2",
+      color: "Blue",
+      size: "M",
+      style: "Modern",
+      stockStatus: "Байгаа",
     },
   ])
 
@@ -59,7 +86,12 @@ export default function ProductsPage() {
     description: "",
     price: "",
     stock: "",
-    category: "",
+    categoryId: "",
+    brand: "",
+    color: "",
+    size: "",
+    style: "",
+    stockStatus: "Байгаа",
   })
 
   const handleOpenDialog = (product?: Product) => {
@@ -70,7 +102,12 @@ export default function ProductsPage() {
         description: product.description,
         price: product.price.toString(),
         stock: product.stock.toString(),
-        category: product.category,
+        categoryId: product.categoryId,
+        brand: product.brand,
+        color: product.color,
+        size: product.size,
+        style: product.style,
+        stockStatus: product.stockStatus,
       })
     } else {
       setEditingProduct(null)
@@ -79,7 +116,12 @@ export default function ProductsPage() {
         description: "",
         price: "",
         stock: "",
-        category: "",
+        categoryId: "",
+        brand: "",
+        color: "",
+        size: "",
+        style: "",
+        stockStatus: "Байгаа",
       })
     }
     setIsDialogOpen(true)
@@ -93,12 +135,24 @@ export default function ProductsPage() {
       description: "",
       price: "",
       stock: "",
-      category: "",
+      categoryId: "",
+      brand: "",
+      color: "",
+      size: "",
+      style: "",
+      stockStatus: "Байгаа",
     })
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!formData.categoryId) {
+      alert("Please select a category")
+      return
+    }
+    
+    const categoryPath = getCategoryPath(formData.categoryId)
     
     if (editingProduct) {
       // Update existing product
@@ -111,7 +165,13 @@ export default function ProductsPage() {
                 description: formData.description,
                 price: parseFloat(formData.price),
                 stock: parseInt(formData.stock),
-                category: formData.category,
+                categoryId: formData.categoryId,
+                category: categoryPath,
+                brand: formData.brand,
+                color: formData.color,
+                size: formData.size,
+                style: formData.style,
+                stockStatus: formData.stockStatus,
               }
             : p
         )
@@ -124,7 +184,13 @@ export default function ProductsPage() {
         description: formData.description,
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
-        category: formData.category,
+        categoryId: formData.categoryId,
+        category: categoryPath,
+        brand: formData.brand,
+        color: formData.color,
+        size: formData.size,
+        style: formData.style,
+        stockStatus: formData.stockStatus,
       }
       setProducts([...products, newProduct])
     }
@@ -165,17 +231,19 @@ export default function ProductsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
+                <TableHead>Brand</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Color</TableHead>
+                <TableHead>Size</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>Stock</TableHead>
+                <TableHead>Stock Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {products.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No products found. Add your first product to get started.
                   </TableCell>
                 </TableRow>
@@ -183,12 +251,14 @@ export default function ProductsPage() {
                 products.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>{product.brand}</TableCell>
                     <TableCell className="max-w-xs truncate">
-                      {product.description}
+                      {product.category}
                     </TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell>${product.price.toFixed(2)}</TableCell>
-                    <TableCell>{product.stock}</TableCell>
+                    <TableCell>{product.color}</TableCell>
+                    <TableCell>{product.size}</TableCell>
+                    <TableCell>{product.price}₮</TableCell>
+                    <TableCell>{product.stockStatus}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -216,7 +286,7 @@ export default function ProductsPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>
@@ -240,6 +310,7 @@ export default function ProductsPage() {
                   required
                 />
               </div>
+              
               <div className="grid gap-2">
                 <Label htmlFor="description">Description</Label>
                 <Input
@@ -251,20 +322,70 @@ export default function ProductsPage() {
                   required
                 />
               </div>
+
               <div className="grid gap-2">
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
+                <Label htmlFor="category">Category (Ангилал)</Label>
+                <CategorySelector
+                  value={formData.categoryId}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, categoryId: value })
                   }
-                  required
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="price">Price ($)</Label>
+                  <Label htmlFor="brand">Brand (Брэнд)</Label>
+                  <Input
+                    id="brand"
+                    value={formData.brand}
+                    onChange={(e) =>
+                      setFormData({ ...formData, brand: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="color">Color (Өнгө)</Label>
+                  <Input
+                    id="color"
+                    value={formData.color}
+                    onChange={(e) =>
+                      setFormData({ ...formData, color: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="size">Size (Хэмжээ)</Label>
+                  <Input
+                    id="size"
+                    value={formData.size}
+                    onChange={(e) =>
+                      setFormData({ ...formData, size: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="style">Style/Model (Загвар)</Label>
+                  <Input
+                    id="style"
+                    value={formData.style}
+                    onChange={(e) =>
+                      setFormData({ ...formData, style: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="price">Price (₮)</Label>
                   <Input
                     id="price"
                     type="number"
@@ -278,7 +399,7 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="stock">Stock</Label>
+                  <Label htmlFor="stock">Stock Quantity</Label>
                   <Input
                     id="stock"
                     type="number"
@@ -290,6 +411,26 @@ export default function ProductsPage() {
                     required
                   />
                 </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="stockStatus">Stock Status (Нөөц)</Label>
+                <Select
+                  value={formData.stockStatus}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, stockStatus: value })
+                  }
+                  required
+                >
+                  <SelectTrigger id="stockStatus">
+                    <SelectValue placeholder="Select stock status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Байгаа">Байгаа (In Stock)</SelectItem>
+                    <SelectItem value="Захиалгаар">Захиалгаар (By Order)</SelectItem>
+                    <SelectItem value="Дууссан">Дууссан (Out of Stock)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
