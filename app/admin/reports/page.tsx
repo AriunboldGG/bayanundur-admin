@@ -15,7 +15,7 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-3xl font-bold">Reports</h1>
         <p className="text-muted-foreground">
-          View analytics and reports for your business
+          Тайлан хянах удирдах цэс 
         </p>
       </div>
 

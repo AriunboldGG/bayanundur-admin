@@ -210,34 +210,32 @@ export default function ProductsPage() {
         <div>
           <h1 className="text-3xl font-bold">Products</h1>
           <p className="text-muted-foreground">
-            Manage your product inventory
+            Бүтээгдэхүүн удирдах цэс
           </p>
         </div>
         <Button onClick={() => handleOpenDialog()}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Product
+          Бараа нэмэх
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Product List</CardTitle>
-          <CardDescription>
-            A list of all products in your inventory
-          </CardDescription>
+          <CardTitle>Бүтээгдэхүүний нийт жагсаалт</CardTitle>
+         
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Brand</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Stock Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Нэр</TableHead>
+                <TableHead>Брэнд</TableHead>
+                <TableHead>Ангилал</TableHead>
+                <TableHead>Өнгө</TableHead>
+                <TableHead>Хэмжээ</TableHead>
+                <TableHead>Үнэ</TableHead>
+                <TableHead>Нөөц</TableHead>
+                <TableHead className="text-right">Өөрчлөх</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

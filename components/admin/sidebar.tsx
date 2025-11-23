@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Package, LayoutDashboard, Settings, LogOut, BarChart3 } from "lucide-react"
+import { Package, LayoutDashboard, Settings, LogOut, BarChart3, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
@@ -17,6 +17,11 @@ const navigation = [
     name: "Products",
     href: "/admin/products",
     icon: Package,
+  },
+  {
+    name: "Price Quotes",
+    href: "/admin/quotes",
+    icon: FileText,
   },
   {
     name: "Reports",

@@ -23,7 +23,8 @@
     "@radix-ui/react-popover": "^1.0.7",
     "@radix-ui/react-tabs": "^1.0.4",
     "cmdk": "^1.0.0",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
