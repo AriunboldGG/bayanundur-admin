@@ -2,17 +2,12 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Package, LayoutDashboard, Settings, LogOut, BarChart3, FileText } from "lucide-react"
+import { Package, Settings, LogOut, BarChart3, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
 
 const navigation = [
-  {
-    name: "Dashboard",
-    href: "/admin",
-    icon: LayoutDashboard,
-  },
   {
     name: "Products",
     href: "/admin/products",

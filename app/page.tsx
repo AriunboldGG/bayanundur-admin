@@ -20,7 +20,7 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/admin")
+      router.push("/admin/products")
     }
   }, [isAuthenticated, router])
 
@@ -32,7 +32,7 @@ export default function LoginPage() {
     try {
       const success = await login(username, password)
       if (success) {
-        router.push("/admin")
+        router.push("/admin/products")
       } else {
         setError("Invalid username or password")
       }
