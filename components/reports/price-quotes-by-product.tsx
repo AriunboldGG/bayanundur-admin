@@ -1,6 +1,8 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -22,34 +24,76 @@ import {
   Pie,
   Cell,
 } from "recharts"
+import { Download } from "lucide-react"
+import { exportToExcel } from "@/lib/excel-export"
 
-const mockData = [
-  { product: "Малгай, каск", quotes: 125, totalAmount: 18500000 },
-  { product: "Нүүрний хамгаалалт, нүдний шил", quotes: 98, totalAmount: 14200000 },
-  { product: "Хамгаалалтын хувцас", quotes: 156, totalAmount: 23400000 },
-  { product: "Гар хамгаалалтын хувцас хэрэгсэл", quotes: 87, totalAmount: 12800000 },
-  { product: "Хөл хамгаалалтын хувцас хэрэгсэл", quotes: 112, totalAmount: 16800000 },
-  { product: "Амьсгал хамгаалах маск, хошуувч", quotes: 134, totalAmount: 19800000 },
-  { product: "Гагнуурын баг, дагалдах хэрэгсэлт", quotes: 76, totalAmount: 11200000 },
-  { product: "Чихэвч, чихний бөглөө", quotes: 92, totalAmount: 13500000 },
-]
+const mockDataByPeriod: Record<string, typeof mockData> = {
+  month: [
+    { product: "Малгай, каск", quotes: 42, totalAmount: 6200000 },
+    { product: "Нүүрний хамгаалалт, нүдний шил", quotes: 33, totalAmount: 4800000 },
+    { product: "Хамгаалалтын хувцас", quotes: 52, totalAmount: 7800000 },
+    { product: "Гар хамгаалалтын хувцас хэрэгсэл", quotes: 29, totalAmount: 4300000 },
+  ],
+  halfyear: [
+    { product: "Малгай, каск", quotes: 125, totalAmount: 18500000 },
+    { product: "Нүүрний хамгаалалт, нүдний шил", quotes: 98, totalAmount: 14200000 },
+    { product: "Хамгаалалтын хувцас", quotes: 156, totalAmount: 23400000 },
+    { product: "Гар хамгаалалтын хувцас хэрэгсэл", quotes: 87, totalAmount: 12800000 },
+    { product: "Хөл хамгаалалтын хувцас хэрэгсэл", quotes: 112, totalAmount: 16800000 },
+    { product: "Амьсгал хамгаалах маск, хошуувч", quotes: 134, totalAmount: 19800000 },
+  ],
+  year: [
+    { product: "Малгай, каск", quotes: 125, totalAmount: 18500000 },
+    { product: "Нүүрний хамгаалалт, нүдний шил", quotes: 98, totalAmount: 14200000 },
+    { product: "Хамгаалалтын хувцас", quotes: 156, totalAmount: 23400000 },
+    { product: "Гар хамгаалалтын хувцас хэрэгсэл", quotes: 87, totalAmount: 12800000 },
+    { product: "Хөл хамгаалалтын хувцас хэрэгсэл", quotes: 112, totalAmount: 16800000 },
+    { product: "Амьсгал хамгаалах маск, хошуувч", quotes: 134, totalAmount: 19800000 },
+    { product: "Гагнуурын баг, дагалдах хэрэгсэлт", quotes: 76, totalAmount: 11200000 },
+    { product: "Чихэвч, чихний бөглөө", quotes: 92, totalAmount: 13500000 },
+  ],
+}
+
+const mockData = mockDataByPeriod.month
 
 const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#0088fe", "#00c49f", "#ffbb28", "#8884d8"]
 
-export function PriceQuotesByProductReport() {
+interface PriceQuotesByProductReportProps {
+  period: string
+}
+
+export function PriceQuotesByProductReport({ period }: PriceQuotesByProductReportProps) {
+  const data = useMemo(() => mockDataByPeriod[period] || mockDataByPeriod.month, [period])
+
+  const handleExport = () => {
+    const exportData = data.map((item) => ({
+      "Барааны нэр/Төрөл": item.product,
+      "Үнийн санал тоо": item.quotes,
+      "Нийт дүн (₮)": item.totalAmount,
+    }))
+    exportToExcel(exportData, `price-quotes-by-product-${period}`, "Price Quotes by Product")
+  }
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Үнийн санал авсан барааны нэр төрлөөр</CardTitle>
-          <CardDescription>
-            Price quotes by product name/type - Table and Graph
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Үнийн санал авсан барааны нэр төрлөөр</CardTitle>
+              <CardDescription>
+                Price quotes by product name/type - Table and Graph ({period === "month" ? "Сар" : period === "halfyear" ? "Хагас жил" : "Жил"})
+              </CardDescription>
+            </div>
+            <Button onClick={handleExport} variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Excel татах
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockData}>
+              <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="product"
@@ -70,7 +114,7 @@ export function PriceQuotesByProductReport() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={mockData}
+                  data={data}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -80,7 +124,7 @@ export function PriceQuotesByProductReport() {
                   dataKey="quotes"
                   nameKey="product"
                 >
-                  {mockData.map((entry, index) => (
+                  {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -100,7 +144,7 @@ export function PriceQuotesByProductReport() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockData.map((row, index) => (
+                {data.map((row, index) => (
                   <TableRow key={index}>
                     <TableCell className="font-medium">{row.product}</TableCell>
                     <TableCell className="text-right">{row.quotes}</TableCell>

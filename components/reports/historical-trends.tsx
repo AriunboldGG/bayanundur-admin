@@ -1,14 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Download } from "lucide-react"
+import { exportToExcel } from "@/lib/excel-export"
 import {
   Table,
   TableBody,
@@ -29,14 +25,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
-
-const timePeriods = [
-  { value: "7days", label: "7 хоног" },
-  { value: "month", label: "Сар" },
-  { value: "quarter", label: "Улирал" },
-  { value: "halfyear", label: "Хагас жил" },
-  { value: "year", label: "Жил" },
-]
 
 // Mock data for different time periods
 const mockData: Record<string, Array<{ date: string; sales: number; quotes: number; purchases: number }>> = {
@@ -73,9 +61,14 @@ const mockData: Record<string, Array<{ date: string; sales: number; quotes: numb
   ],
 }
 
-export function HistoricalTrendsReport() {
-  const [period, setPeriod] = useState("7days")
-  const data = mockData[period] || []
+interface HistoricalTrendsReportProps {
+  period: string
+}
+
+export function HistoricalTrendsReport({ period }: HistoricalTrendsReportProps) {
+  // Map period from parent to internal period format
+  const internalPeriod = period === "month" ? "month" : period === "halfyear" ? "halfyear" : period === "year" ? "year" : "month"
+  const data = mockData[internalPeriod] || []
 
   return (
     <div className="space-y-4">
@@ -83,23 +76,23 @@ export function HistoricalTrendsReport() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Түүхэн трэнд (Historical Trends)</CardTitle>
+              <CardTitle>Хянах самбар</CardTitle>
               <CardDescription>
-                View historical data trends over different time periods
+                View historical data trends over different time periods ({period === "month" ? "Сар" : period === "halfyear" ? "Хагас жил" : "Жил"})
               </CardDescription>
             </div>
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                {timePeriods.map((tp) => (
-                  <SelectItem key={tp.value} value={tp.value}>
-                    {tp.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Button onClick={() => {
+              const exportData = data.map((item) => ({
+                Огноо: item.date,
+                Борлуулалт: item.sales,
+                "Үнийн санал": item.quotes,
+                Худалдан_авалт: item.purchases,
+              }))
+              exportToExcel(exportData, `historical-trends-${period}`, "Historical Trends")
+            }} variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Excel татах
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">

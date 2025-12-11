@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface Product {
@@ -47,6 +47,9 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [selectedStockStatus, setSelectedStockStatus] = useState<string>("all")
+  const [selectedBrand, setSelectedBrand] = useState<string>("all")
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -253,6 +256,30 @@ export default function ProductsPage() {
     }
   }
 
+  // Get unique categories from products
+  const uniqueCategories = Array.from(
+    new Set(products.map((p) => p.category).filter(Boolean))
+  ).sort()
+
+  // Get unique brands from products
+  const uniqueBrands = Array.from(
+    new Set(products.map((p) => p.brand).filter(Boolean))
+  ).sort()
+
+  // Filter products based on selected filters
+  const filteredProducts = products.filter((product) => {
+    const categoryMatch = selectedCategory === "all" || product.category === selectedCategory
+    const brandMatch = selectedBrand === "all" || product.brand === selectedBrand
+    const stockMatch = 
+      selectedStockStatus === "all" 
+        ? true 
+        : selectedStockStatus === "inStock" 
+          ? product.stock > 0 
+          : product.stock === 0
+    
+    return categoryMatch && brandMatch && stockMatch
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -261,6 +288,16 @@ export default function ProductsPage() {
           <p className="text-muted-foreground">
             Бүтээгдэхүүн удирдах цэс
           </p>
+          {!isLoading && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Нийт: <span className="font-semibold text-foreground">{products.length}</span> бүтээгдэхүүн
+              {filteredProducts.length !== products.length && (
+                <span className="ml-2">
+                  (Харуулж байна: <span className="font-semibold text-foreground">{filteredProducts.length}</span>)
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <Button onClick={() => handleOpenDialog()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -270,10 +307,85 @@ export default function ProductsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Бүтээгдэхүүний нийт жагсаалт</CardTitle>
-         
+          <div className="flex items-center justify-between">
+            <CardTitle>Бүтээгдэхүүний нийт жагсаалт</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
+          {!isLoading && products.length > 0 && (
+            <div className="mb-6 p-4 border rounded-lg bg-muted/50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">Шүүлт (Filters)</h3>
+                {(selectedCategory !== "all" || selectedStockStatus !== "all" || selectedBrand !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCategory("all")
+                      setSelectedStockStatus("all")
+                      setSelectedBrand("all")
+                    }}
+                    className="h-8"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Цэвэрлэх
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Category Filter */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Ангилалаар шүүх</Label>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Бүх ангилал" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Бүх ангилал</SelectItem>
+                      {uniqueCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Brand Filter */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Брэндээр шүүх</Label>
+                  <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Бүх брэнд" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Бүх брэнд</SelectItem>
+                      {uniqueBrands.map((brand) => (
+                        <SelectItem key={brand} value={brand}>
+                          {brand}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Stock Status Filter */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Нөөцөөр шүүх</Label>
+                  <Select value={selectedStockStatus} onValueChange={setSelectedStockStatus}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Бүх нөөц" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Бүх нөөц</SelectItem>
+                      <SelectItem value="inStock">Нөөцтэй (In Stock)</SelectItem>
+                      <SelectItem value="outOfStock">Нөөцгүй (Out of Stock)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">
               Loading products...
@@ -306,14 +418,16 @@ export default function ProductsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.length === 0 ? (
+                {filteredProducts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={10} className="text-center text-muted-foreground">
-                      No products found. Add your first product to get started.
+                      {products.length === 0 
+                        ? "No products found. Add your first product to get started."
+                        : "No products match the selected filters."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  products.map((product) => {
+                  filteredProducts.map((product) => {
                     const sizeDisplay = Array.isArray(product.size) 
                       ? product.size.join(", ") 
                       : product.size || ""

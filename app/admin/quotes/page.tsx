@@ -20,7 +20,15 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Eye, CheckCircle, XCircle, Mail, Download, FileDown } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Eye, CheckCircle, XCircle, Download, FileDown } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
 
 // Mock data for price quotes
@@ -35,11 +43,12 @@ const mockQuotes: PriceQuote[] = [
     position: "Худалдан авах менежер",
     company: "ABC ХХК",
     selectedProducts: [
-      { productId: "1", productName: "Sample Product 1", quantity: 50 },
-      { productId: "2", productName: "Sample Product 2", quantity: 30 },
+      { productId: "1", productName: "Sample Product 1", quantity: 50, status: "pending" },
+      { productId: "2", productName: "Sample Product 2", quantity: 30, status: "pending" },
     ],
     status: "pending",
-    createdAt: "2024-01-15T10:30:00",
+    isReviewed: false,
+    createdAt: new Date().toISOString(),
   },
   {
     id: "2",
@@ -51,11 +60,12 @@ const mockQuotes: PriceQuote[] = [
     position: "Директор",
     company: "XYZ Корпораци",
     selectedProducts: [
-      { productId: "1", productName: "Sample Product 1", quantity: 100 },
+      { productId: "1", productName: "Sample Product 1", quantity: 100, status: "approved" },
     ],
     status: "approved",
-    createdAt: "2024-01-14T14:20:00",
-    updatedAt: "2024-01-14T16:45:00",
+    isReviewed: true,
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
+    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
   },
   {
     id: "3",
@@ -67,12 +77,13 @@ const mockQuotes: PriceQuote[] = [
     position: "Худалдан авах ажилтан",
     company: "DEF Хувьцаат",
     selectedProducts: [
-      { productId: "2", productName: "Sample Product 2", quantity: 25 },
-      { productId: "3", productName: "Sample Product 3", quantity: 15 },
+      { productId: "2", productName: "Sample Product 2", quantity: 25, status: "approved" },
+      { productId: "3", productName: "Sample Product 3", quantity: 15, status: "rejected" },
     ],
-    status: "sent",
-    createdAt: "2024-01-13T09:15:00",
-    updatedAt: "2024-01-13T11:30:00",
+    status: "pending",
+    isReviewed: true,
+    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
+    updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), // 8 days ago
   },
 ]
 
@@ -80,38 +91,119 @@ const statusColors = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
   approved: "bg-green-100 text-green-800 border-green-200",
   rejected: "bg-red-100 text-red-800 border-red-200",
-  sent: "bg-blue-100 text-blue-800 border-blue-200",
 }
 
 const statusLabels = {
   pending: "Хүлээгдэж буй",
   approved: "Зөвшөөрсөн",
   rejected: "Татгалзсан",
-  sent: "Илгээсэн",
 }
+
+const timePeriods = [
+  { value: "all", label: "Бүгд (All)" },
+  { value: "month", label: "Сар (Month)" },
+  { value: "halfyear", label: "Хагас жил (Half Year)" },
+  { value: "year", label: "Жил (Year)" },
+]
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<PriceQuote[]>(mockQuotes)
   const [selectedQuote, setSelectedQuote] = useState<PriceQuote | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("all")
 
   const handleViewQuote = (quote: PriceQuote) => {
     setSelectedQuote(quote)
     setIsDialogOpen(true)
   }
 
-  const handleStatusChange = (quoteId: string, newStatus: PriceQuote["status"]) => {
+  // Calculate overall quote status based on product statuses
+  const calculateQuoteStatus = (products: PriceQuote["selectedProducts"]): PriceQuote["status"] => {
+    if (products.length === 0) return "pending"
+    const allApproved = products.every((p) => p.status === "approved")
+    const allRejected = products.every((p) => p.status === "rejected")
+    const hasPending = products.some((p) => p.status === "pending" || !p.status)
+    
+    if (allApproved) return "approved"
+    if (allRejected) return "rejected"
+    if (hasPending) return "pending"
+    return "pending"
+  }
+
+  // Get display status for main table (New or Reviewed)
+  const getDisplayStatus = (quote: PriceQuote): { label: string; color: string } => {
+    const reviewed = quote.isReviewed || false
+    if (reviewed) {
+      return {
+        label: "Reviewed",
+        color: "bg-blue-100 text-blue-800 border-blue-200",
+      }
+    }
+    return {
+      label: "New",
+      color: "bg-gray-100 text-gray-800 border-gray-200",
+    }
+  }
+
+  const handleProductStatusChange = (
+    quoteId: string,
+    productId: string,
+    newStatus: "approved" | "rejected"
+  ) => {
     setQuotes(
-      quotes.map((quote) =>
-        quote.id === quoteId
-          ? { ...quote, status: newStatus, updatedAt: new Date().toISOString() }
-          : quote
+      quotes.map((quote) => {
+        if (quote.id === quoteId) {
+          const updatedProducts = quote.selectedProducts.map((product) =>
+            product.productId === productId
+              ? { ...product, status: newStatus }
+              : product
+          )
+          const newQuoteStatus = calculateQuoteStatus(updatedProducts)
+          return {
+            ...quote,
+            selectedProducts: updatedProducts,
+            status: newQuoteStatus,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return quote
+      })
+    )
+    
+    if (selectedQuote?.id === quoteId) {
+      const updatedProducts = selectedQuote.selectedProducts.map((product) =>
+        product.productId === productId
+          ? { ...product, status: newStatus }
+          : product
       )
+      const newQuoteStatus = calculateQuoteStatus(updatedProducts)
+      setSelectedQuote({
+        ...selectedQuote,
+        selectedProducts: updatedProducts,
+        status: newQuoteStatus,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+  }
+
+  const handleQuoteReviewStatusChange = (quoteId: string, isReviewed: boolean) => {
+    // Only update the quote review status, not product statuses
+    setQuotes(
+      quotes.map((quote) => {
+        if (quote.id === quoteId) {
+          return {
+            ...quote,
+            isReviewed: isReviewed,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return quote
+      })
     )
     if (selectedQuote?.id === quoteId) {
       setSelectedQuote({
         ...selectedQuote,
-        status: newStatus,
+        isReviewed: isReviewed,
         updatedAt: new Date().toISOString(),
       })
     }
@@ -127,12 +219,47 @@ export default function QuotesPage() {
     })
   }
 
+  // Filter quotes by period
+  const getFilteredQuotes = (): PriceQuote[] => {
+    if (selectedPeriod === "all") {
+      return quotes
+    }
+    
+    const now = new Date()
+    const quoteDate = new Date()
+    
+    let startDate: Date
+    
+    switch (selectedPeriod) {
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        break
+      case "halfyear":
+        const currentMonth = now.getMonth()
+        const halfYearStartMonth = currentMonth < 6 ? 0 : 6
+        startDate = new Date(now.getFullYear(), halfYearStartMonth, 1)
+        break
+      case "year":
+        startDate = new Date(now.getFullYear(), 0, 1)
+        break
+      default:
+        return quotes
+    }
+    
+    return quotes.filter((quote) => {
+      quoteDate.setTime(new Date(quote.createdAt).getTime())
+      return quoteDate >= startDate && quoteDate <= now
+    })
+  }
+
+  const filteredQuotes = getFilteredQuotes()
+
   const handleDownloadExcel = async () => {
     // Dynamically import xlsx to avoid SSR issues
     const XLSX = await import("xlsx")
 
-    // Prepare data for Excel export
-    const excelData = quotes.map((quote) => {
+    // Prepare data for Excel export (use filtered quotes)
+    const excelData = filteredQuotes.map((quote) => {
       const products = quote.selectedProducts
         .map((p) => `${p.productName} (${p.quantity || "N/A"})`)
         .join("; ")
@@ -178,7 +305,8 @@ export default function QuotesPage() {
     worksheet["!cols"] = columnWidths
 
     // Generate Excel file and download
-    const fileName = `Үнийн_санал_${new Date().toISOString().split("T")[0]}.xlsx`
+    const periodLabel = timePeriods.find(p => p.value === selectedPeriod)?.label || selectedPeriod
+    const fileName = `Үнийн_санал_${periodLabel}_${new Date().toISOString().split("T")[0]}.xlsx`
     XLSX.writeFile(workbook, fileName)
   }
 
@@ -272,11 +400,38 @@ export default function QuotesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Үнийн санал</h1>
-        <p className="text-muted-foreground">
-          Харилцагчаас ирсэн үнийн санал удирдах цэс
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Үнийн санал</h1>
+          <p className="text-muted-foreground">
+            Харилцагчаас ирсэн үнийн санал удирдах цэс
+          </p>
+          {filteredQuotes.length !== quotes.length && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Нийт: <span className="font-semibold text-foreground">{quotes.length}</span> үнийн санал
+              (Харуулж байна: <span className="font-semibold text-foreground">{filteredQuotes.length}</span>)
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="period" className="text-sm font-medium">
+              Хугацаа:
+            </Label>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger id="period" className="w-[180px]">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                {timePeriods.map((period) => (
+                  <SelectItem key={period.value} value={period.value}>
+                    {period.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
       <Card>
@@ -307,14 +462,16 @@ export default function QuotesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {quotes.length === 0 ? (
+              {filteredQuotes.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    No quote requests found.
+                    {quotes.length === 0 
+                      ? "No quote requests found."
+                      : `No quotes found for selected period (${timePeriods.find(p => p.value === selectedPeriod)?.label || selectedPeriod}).`}
                   </TableCell>
                 </TableRow>
               ) : (
-                quotes.map((quote) => (
+                filteredQuotes.map((quote) => (
                   <TableRow key={quote.id}>
                     <TableCell>{formatDate(quote.createdAt)}</TableCell>
                     <TableCell className="font-medium">
@@ -325,8 +482,8 @@ export default function QuotesPage() {
                     <TableCell>{quote.phone}</TableCell>
                     <TableCell>{quote.selectedProducts.length}</TableCell>
                     <TableCell>
-                      <Badge className={statusColors[quote.status]}>
-                        {statusLabels[quote.status]}
+                      <Badge className={getDisplayStatus(quote).color}>
+                        {getDisplayStatus(quote).label}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -431,19 +588,63 @@ export default function QuotesPage() {
                         <TableRow>
                           <TableHead>Барааны нэр</TableHead>
                           <TableHead className="text-right">Тоо ширхэг</TableHead>
+                          <TableHead className="text-center">Төлөв</TableHead>
+                          <TableHead className="text-right">Үйлдэл</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedQuote.selectedProducts.map((product, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium">
-                              {product.productName}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {product.quantity || "N/A"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {selectedQuote.selectedProducts.map((product, index) => {
+                          const productStatus = product.status || "pending"
+                          return (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">
+                                {product.productName}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {product.quantity || "N/A"}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={statusColors[productStatus]}>
+                                  {statusLabels[productStatus]}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleProductStatusChange(
+                                        selectedQuote.id,
+                                        product.productId,
+                                        "approved"
+                                      )
+                                    }
+                                    disabled={productStatus === "approved"}
+                                    className="h-8"
+                                  >
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleProductStatusChange(
+                                        selectedQuote.id,
+                                        product.productId,
+                                        "rejected"
+                                      )
+                                    }
+                                    disabled={productStatus === "rejected"}
+                                    className="h-8"
+                                  >
+                                    <XCircle className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -456,9 +657,15 @@ export default function QuotesPage() {
                       Төлөв
                     </label>
                     <div className="mt-1">
-                      <Badge className={statusColors[selectedQuote.status]}>
-                        {statusLabels[selectedQuote.status]}
-                      </Badge>
+                      {selectedQuote.isReviewed ? (
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                          Reviewed
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+                          New
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -474,27 +681,19 @@ export default function QuotesPage() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => handleStatusChange(selectedQuote.id, "rejected")}
-                    disabled={selectedQuote.status === "rejected"}
+                    onClick={() => handleQuoteReviewStatusChange(selectedQuote.id, false)}
+                    disabled={selectedQuote.isReviewed === false}
                   >
                     <XCircle className="mr-2 h-4 w-4" />
-                    Татгалзах
+                    New
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => handleStatusChange(selectedQuote.id, "approved")}
-                    disabled={selectedQuote.status === "approved"}
+                    onClick={() => handleQuoteReviewStatusChange(selectedQuote.id, true)}
+                    disabled={selectedQuote.isReviewed === true}
                   >
                     <CheckCircle className="mr-2 h-4 w-4" />
-                    Зөвшөөрөх
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleStatusChange(selectedQuote.id, "sent")}
-                    disabled={selectedQuote.status === "sent"}
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Илгээсэн
+                    Reviewed
                   </Button>
                 </div>
                 <Button onClick={() => setIsDialogOpen(false)}>Хаах</Button>

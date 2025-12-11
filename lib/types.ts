@@ -11,8 +11,10 @@ export interface PriceQuote {
     productId: string
     productName: string
     quantity?: number
+    status?: "pending" | "approved" | "rejected"
   }>
-  status: "pending" | "approved" | "rejected" | "sent"
+  status: "pending" | "approved" | "rejected"
+  isReviewed?: boolean // Track if quote has been reviewed (independent of product statuses)
   createdAt: string
   updatedAt?: string
 }

@@ -1,6 +1,8 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -19,8 +21,10 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
+import { Download } from "lucide-react"
+import { exportToExcel } from "@/lib/excel-export"
 
-const mockData = [
+const baseMockData = [
   {
     customer: "ABC ХХК",
     products: [
@@ -66,23 +70,83 @@ const mockData = [
   },
 ]
 
-const flattenedData = mockData.flatMap((customer) =>
-  customer.products.map((product) => ({
-    customer: customer.customer,
-    product: product.product,
-    amount: product.amount,
-  }))
-)
+const mockDataByPeriod: Record<string, typeof baseMockData> = {
+  month: [
+    {
+      customer: "ABC ХХК",
+      products: [
+        { product: "Малгай, каск", amount: 850000 },
+        { product: "Хамгаалалтын хувцас", amount: 600000 },
+      ],
+      totalAmount: 1450000,
+    },
+    {
+      customer: "XYZ Корпораци",
+      products: [
+        { product: "Нүүрний хамгаалалт", amount: 1100000 },
+      ],
+      totalAmount: 1100000,
+    },
+  ],
+  halfyear: baseMockData,
+  year: [
+    ...baseMockData,
+    {
+      customer: "MNO Холдинг",
+      products: [
+        { product: "Малгай, каск", amount: 5200000 },
+        { product: "Хамгаалалтын хувцас", amount: 3800000 },
+        { product: "Гар хамгаалалт", amount: 2400000 },
+      ],
+      totalAmount: 11400000,
+    },
+    {
+      customer: "PQR Компани",
+      products: [
+        { product: "Амьсгал хамгаалах маск", amount: 4200000 },
+        { product: "Гагнуурын баг", amount: 2800000 },
+      ],
+      totalAmount: 7000000,
+    },
+  ],
+}
 
-export function PurchasesByCustomerReport() {
+interface PurchasesByCustomerReportProps {
+  period: string
+}
+
+export function PurchasesByCustomerReport({ period }: PurchasesByCustomerReportProps) {
+  const data = useMemo(() => mockDataByPeriod[period] || mockDataByPeriod.month, [period])
+  
+  const flattenedData = useMemo(() => 
+    data.flatMap((customer) =>
+      customer.products.map((product) => ({
+        customer: customer.customer,
+        product: product.product,
+        amount: product.amount,
+      }))
+    ), [data]
+  )
+
+  const handleExport = () => {
+    exportToExcel(flattenedData, `purchases-by-customer-${period}`, "Purchases by Customer")
+  }
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Худалдан авалт хийсэн харилцагчаар</CardTitle>
-          <CardDescription>
-            Purchases by customer - by product name/type and price amount
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Худалдан авалт хийсэн харилцагчаар</CardTitle>
+              <CardDescription>
+                Purchases by customer - by product name/type and price amount ({period === "month" ? "Сар" : period === "halfyear" ? "Хагас жил" : "Жил"})
+              </CardDescription>
+            </div>
+            <Button onClick={handleExport} variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Excel татах
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="h-[400px]">
