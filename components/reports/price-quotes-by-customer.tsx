@@ -27,8 +27,10 @@ import {
 import { Download } from "lucide-react"
 import { exportToExcel } from "@/lib/excel-export"
 
+type CustomerQuoteData = Array<{ customer: string; quotes: number; totalAmount: number }>
+
 // Mock data for different periods
-const mockDataByPeriod: Record<string, typeof mockData> = {
+const mockDataByPeriod: Record<string, CustomerQuoteData> = {
   month: [
     { customer: "ABC ХХК", quotes: 15, totalAmount: 4500000 },
     { customer: "XYZ Корпораци", quotes: 12, totalAmount: 3200000 },

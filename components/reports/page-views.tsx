@@ -26,7 +26,9 @@ import {
 import { Download } from "lucide-react"
 import { exportMultipleSheets } from "@/lib/excel-export"
 
-const mockDataByPeriod: Record<string, typeof mockData> = {
+type PageViewData = Array<{ date: string; views: number; unique: number }>
+
+const mockDataByPeriod: Record<string, PageViewData> = {
   month: [
     { date: "Дүүрэг 1", views: 1250, unique: 890 },
     { date: "Дүүрэг 2", views: 1420, unique: 1020 },
