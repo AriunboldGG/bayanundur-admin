@@ -11,10 +11,10 @@ export interface PriceQuote {
     productId: string
     productName: string
     quantity?: number
-    status?: "pending" | "approved" | "rejected"
+    status?: "sent_offer" | "create_invoice" | "spent"
   }>
-  status: "pending" | "approved" | "rejected"
-  isReviewed?: boolean // Track if quote has been reviewed (independent of product statuses)
+  status: "sent_offer" | "create_invoice" | "spent" | "pending"
+  quoteStatus?: "new" | "pending" | "in_progress" | "completed" | "rejected" // Overall quote status
   createdAt: string
   updatedAt?: string
 }
