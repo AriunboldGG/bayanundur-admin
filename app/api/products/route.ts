@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase-admin";
+import { db, getStorageBucket } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 
 // GET - Fetch all products (with optional filters)
@@ -69,25 +69,169 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new product
+// Helper function to upload images to Firebase Storage
+async function uploadImagesToStorage(files: File[]): Promise<string[]> {
+  if (files.length === 0) return [];
+  
+  let bucket;
+  try {
+    bucket = getStorageBucket();
+    // Check if bucket exists
+    const [exists] = await bucket.exists();
+    if (!exists) {
+      console.warn(`Storage bucket "${bucket.name}" does not exist. Attempting to create it...`);
+      try {
+        // Try to create the bucket (this might fail if user doesn't have permissions)
+        await bucket.create();
+        console.log(`Successfully created storage bucket: ${bucket.name}`);
+      } catch (createError: any) {
+        console.error("Failed to create bucket:", createError);
+        throw new Error(
+          `Storage bucket "${bucket.name}" does not exist and could not be created automatically. ` +
+          `Please enable Firebase Storage in Firebase Console: ` +
+          `https://console.firebase.google.com/project/bayanundur-backend/storage ` +
+          `The bucket will be created automatically when you enable Storage.`
+        );
+      }
+    }
+  } catch (error: any) {
+    console.error("Error accessing storage bucket:", error);
+    const bucketName = bucket?.name || 'unknown';
+    
+    // Provide helpful error message
+    if (error.message.includes('does not exist')) {
+      throw error; // Re-throw our custom error
+    }
+    
+    throw new Error(`Storage bucket error (${bucketName}): ${error.message || 'Bucket not accessible. Please check Firebase Storage configuration.'}`);
+  }
+  
+  const uploadPromises = files.map(async (file) => {
+    // Generate unique filename
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const fileExtension = file.name.split('.').pop();
+    const fileName = `products/${timestamp}-${randomString}.${fileExtension}`;
+
+    // Convert File to Buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    try {
+      // Upload to Firebase Storage
+      const fileRef = bucket.file(fileName);
+      await fileRef.save(buffer, {
+        metadata: {
+          contentType: file.type,
+        },
+      });
+
+      // Make file publicly accessible
+      await fileRef.makePublic();
+
+      // Get public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      return publicUrl;
+    } catch (uploadError: any) {
+      console.error(`Error uploading file ${file.name}:`, uploadError);
+      throw new Error(`Failed to upload ${file.name}: ${uploadError.message || 'Unknown error'}`);
+    }
+  });
+
+  return Promise.all(uploadPromises);
+}
+
+// POST - Create a new product (supports both JSON and FormData)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, price, stock, brand, color, size, cat, subcat, "model number": modelNumber } = body;
+    const contentType = request.headers.get("content-type") || "";
+    
+    let productData: any;
+    let imageUrls: string[] = [];
 
-    const productData = {
-      name,
-      price: typeof price === 'number' ? price : parseFloat(price),
-      stock: typeof stock === 'number' ? stock : parseInt(stock),
-      brand,
-      color,
-      size: Array.isArray(size) ? size : size,
-      cat,
-      subcat,
-      "model number": modelNumber || "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Check if request is FormData (multipart/form-data)
+    // Note: Browser automatically sets Content-Type with boundary when using FormData
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      
+      // Extract product fields from FormData
+      productData = {
+        name: formData.get("name") as string,
+        code: formData.get("code") as string || "",
+        price: parseFloat(formData.get("price") as string),
+        stock: parseInt(formData.get("stock") as string),
+        brand: formData.get("brand") as string,
+        color: formData.get("color") as string,
+        size: formData.get("size") ? (formData.get("size") as string).split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [],
+        material: formData.get("material") as string || "",
+        description: formData.get("description") as string || "",
+        feature: formData.get("feature") as string || "",
+        mainCategory: formData.get("mainCategory") as string || "",
+        category: formData.get("category") as string,
+        subcategory: formData.get("subcategory") as string || "",
+        "model number": formData.get("modelNumber") as string || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Extract image files from FormData
+      const imageFiles: File[] = [];
+      const imageFilesData = formData.getAll("images") as File[];
+      
+      for (const file of imageFilesData) {
+        if (file instanceof File && file.type.startsWith('image/')) {
+          imageFiles.push(file);
+        }
+      }
+
+      // Upload images to Firebase Storage
+      if (imageFiles.length > 0) {
+        imageUrls = await uploadImagesToStorage(imageFiles);
+      }
+
+      // Add image URLs to product data
+      productData.images = imageUrls;
+    } else {
+      // Handle JSON request (backward compatibility)
+      const body = await request.json();
+      const { 
+        name, 
+        price, 
+        stock, 
+        brand, 
+        color, 
+        size, 
+        category, 
+        subcategory, 
+        "model number": modelNumber,
+        images,
+        code,
+        material,
+        description,
+        feature,
+        mainCategory,
+      } = body;
+
+      productData = {
+        name,
+        code: code || "",
+        price: typeof price === 'number' ? price : parseFloat(price),
+        stock: typeof stock === 'number' ? stock : parseInt(stock),
+        brand,
+        color,
+        size: Array.isArray(size) ? size : (size ? size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : []),
+        material: material || "",
+        description: description || "",
+        feature: feature || "",
+        mainCategory: mainCategory || "",
+        category: category || "",
+        subcategory: subcategory || "",
+        "model number": modelNumber || "",
+        images: images || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
 
     const docRef = await db.collection("products").add(productData);
 
@@ -95,10 +239,10 @@ export async function POST(request: NextRequest) {
       success: true,
       data: { id: docRef.id, ...productData },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating product:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to create product" },
+      { success: false, error: error?.message || "Failed to create product" },
       { status: 500 }
     );
   }

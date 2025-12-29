@@ -27,20 +27,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, Trash2, X } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Upload, XCircle, Search } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { categories, Category } from "@/lib/categories"
 
 interface Product {
   id: string
   name: string
+  code?: string
   price: number
   stock: number
   brand: string
   color: string
   size: string[] | string // Can be array or string
+  material?: string
+  description?: string
+  feature?: string
+  mainCategory?: string
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
   "model number"?: string // Модел дугаар (Model number)
+  images?: string[] // Product images URLs
 }
 
 export default function ProductsPage() {
@@ -50,21 +57,35 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedStockStatus, setSelectedStockStatus] = useState<string>("all")
   const [selectedBrand, setSelectedBrand] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState<string>("")
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
+    code: "", // Барааны нэр: Код
     price: "",
     stock: "",
     brand: "",
     color: "",
     size: "", // Will be stored as comma-separated string, converted to array
-    category: "", // Ангилал
-    subcategory: "", // Дэд ангилал
+    material: "", // Материал
+    description: "", // Тодорхойлолт
+    feature: "", // Онцлог
+    mainCategory: "", // Main category ID
+    category: "", // Ангилал (subcategory)
+    subcategory: "", // Дэд ангилал (sub-subcategory if exists)
     modelNumber: "", // Модел дугаар
   })
+  
+  const [selectedMainCategory, setSelectedMainCategory] = useState<string>("")
+  const [availableSubcategories, setAvailableSubcategories] = useState<Category[]>([])
+  const [availableSubSubcategories, setAvailableSubSubcategories] = useState<Category[]>([])
+  const [productImages, setProductImages] = useState<string[]>([]) // Array of image URLs
+  const [imageFiles, setImageFiles] = useState<File[]>([]) // Array of File objects for new uploads
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
+  const [isUploadingImages, setIsUploadingImages] = useState(false)
 
   // Fetch products from Firestore
   useEffect(() => {
@@ -88,6 +109,7 @@ export default function ProductsPage() {
         const mappedProducts = result.data.map((product: any) => ({
           id: product.id,
           name: product.name || "",
+          code: product.code || "",
           price: product.price || 0,
           stock: product.stock || 0,
           brand: product.brand || "",
@@ -97,9 +119,14 @@ export default function ProductsPage() {
             : typeof product.size === 'string' 
               ? product.size.split(',').map((s: string) => s.trim())
               : [],
+          material: product.material || "",
+          description: product.description || "",
+          feature: product.feature || "",
+          mainCategory: product.mainCategory || "",
           category: product.category || "",
           subcategory: product.subcategory || "",
           "model number": product["model number"] || product.modelNumber || "",
+          images: product.images || [],
         }))
         setProducts(mappedProducts)
       } else {
@@ -119,30 +146,75 @@ export default function ProductsPage() {
       const sizeValue = Array.isArray(product.size) 
         ? product.size.join(", ") 
         : product.size || ""
+      
+      // Set all existing product data
       setFormData({
-        name: product.name,
+        name: product.name || "",
+        code: product.code || "",
         price: product.price.toString(),
         stock: product.stock.toString(),
-        brand: product.brand,
-        color: product.color,
+        brand: product.brand || "",
+        color: product.color || "",
         size: sizeValue,
-        category: product.category,
-        subcategory: product.subcategory,
+        material: product.material || "",
+        description: product.description || "",
+        feature: product.feature || "",
+        mainCategory: product.mainCategory || "",
+        category: product.category || "",
+        subcategory: product.subcategory || "",
         modelNumber: product["model number"] || "",
       })
+      
+      // Set existing images
+      setProductImages(product.images || [])
+      setImagePreviews(product.images || [])
+      setImageFiles([])
+      
+      // Set main category and load subcategories if mainCategory exists
+      if (product.mainCategory) {
+        setSelectedMainCategory(product.mainCategory)
+        const mainCat = categories.find(cat => cat.id === product.mainCategory)
+        if (mainCat && mainCat.children) {
+          setAvailableSubcategories(mainCat.children)
+          
+          // If category is set, check for sub-subcategories
+          if (product.category) {
+            const subCat = mainCat.children.find(sub => sub.id === product.category)
+            if (subCat && subCat.children) {
+              setAvailableSubSubcategories(subCat.children)
+            } else {
+              setAvailableSubSubcategories([])
+            }
+          } else {
+            setAvailableSubSubcategories([])
+          }
+        }
+      } else {
+        setSelectedMainCategory("")
+        setAvailableSubcategories([])
+        setAvailableSubSubcategories([])
+      }
     } else {
       setEditingProduct(null)
       setFormData({
         name: "",
+        code: "",
         price: "",
         stock: "",
         brand: "",
         color: "",
         size: "",
+        material: "",
+        description: "",
+        feature: "",
+        mainCategory: "",
         category: "",
         subcategory: "",
         modelNumber: "",
       })
+      setSelectedMainCategory("")
+      setAvailableSubcategories([])
+      setAvailableSubSubcategories([])
     }
     setIsDialogOpen(true)
   }
@@ -152,26 +224,148 @@ export default function ProductsPage() {
     setEditingProduct(null)
     setFormData({
       name: "",
+      code: "",
       price: "",
       stock: "",
       brand: "",
       color: "",
       size: "",
+      material: "",
+      description: "",
+      feature: "",
+      mainCategory: "",
       category: "",
       subcategory: "",
       modelNumber: "",
     })
+    setSelectedMainCategory("")
+    setAvailableSubcategories([])
+    setAvailableSubSubcategories([])
+    setProductImages([])
+    setImageFiles([])
+    setImagePreviews([])
   }
-
+  
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+    
+    const newFiles = Array.from(files)
+    const totalImages = imagePreviews.length + newFiles.length
+    
+    if (totalImages > 5) {
+      alert("Та хамгийн ихдээ 5 зураг нэмж болно (You can add maximum 5 images)")
+      return
+    }
+    
+    const newPreviews: string[] = []
+    const validFiles: File[] = []
+    
+    newFiles.forEach((file) => {
+      if (file.type.startsWith('image/')) {
+        validFiles.push(file)
+        const preview = URL.createObjectURL(file)
+        newPreviews.push(preview)
+      }
+    })
+    
+    setImageFiles([...imageFiles, ...validFiles])
+    setImagePreviews([...imagePreviews, ...newPreviews])
+    
+    // Reset input
+    e.target.value = ''
+  }
+  
+  const handleRemoveImage = (index: number) => {
+    // Remove from previews
+    const newPreviews = [...imagePreviews]
+    const previewToRemove = newPreviews[index]
+    
+    // Revoke object URL if it's a preview
+    if (previewToRemove.startsWith('blob:')) {
+      URL.revokeObjectURL(previewToRemove)
+    }
+    
+    newPreviews.splice(index, 1)
+    setImagePreviews(newPreviews)
+    
+    // Remove from files if it's a new file
+    if (index < imageFiles.length) {
+      const newFiles = [...imageFiles]
+      newFiles.splice(index, 1)
+      setImageFiles(newFiles)
+    } else {
+      // Remove from existing images
+      const newImages = [...productImages]
+      newImages.splice(index - imageFiles.length, 1)
+      setProductImages(newImages)
+    }
+  }
+  
+  const handleMainCategoryChange = (mainCategoryId: string) => {
+    setSelectedMainCategory(mainCategoryId)
+    setFormData({ ...formData, mainCategory: mainCategoryId, category: "", subcategory: "" })
+    
+    // Find the selected main category
+    const mainCat = categories.find(cat => cat.id === mainCategoryId)
+    if (mainCat && mainCat.children) {
+      setAvailableSubcategories(mainCat.children)
+      setAvailableSubSubcategories([])
+    } else {
+      setAvailableSubcategories([])
+      setAvailableSubSubcategories([])
+    }
+  }
+  
+  const handleSubcategoryChange = (subcategoryId: string) => {
+    setFormData({ ...formData, category: subcategoryId, subcategory: "" })
+    
+    // Find the selected subcategory
+    const mainCat = categories.find(cat => cat.id === selectedMainCategory)
+    if (mainCat && mainCat.children) {
+      const subCat = mainCat.children.find(sub => sub.id === subcategoryId)
+      if (subCat && subCat.children) {
+        setAvailableSubSubcategories(subCat.children)
+      } else {
+        setAvailableSubSubcategories([])
+      }
+    }
+  }
+  
+  const handleSubSubcategoryChange = (subSubcategoryId: string) => {
+    setFormData({ ...formData, subcategory: subSubcategoryId })
+  }
+  
+  // Check if fields should be shown based on main category selection or if editing
+  const shouldShowFields = () => {
+    // If editing, always show fields (main category is already set)
+    if (editingProduct) {
+      return true
+    }
+    // For new products, require main category selection
+    return selectedMainCategory !== ""
+  }
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.category || !formData.subcategory) {
-      alert("Please fill in category (Ангилал) and subcategory (Дэд ангилал)")
+    if (!selectedMainCategory) {
+      alert("Үндсэн ангилал сонгоно уу (Please select main category)")
+      return
+    }
+    
+    if (!formData.category) {
+      alert("Ангилал сонгоно уу (Please select category)")
+      return
+    }
+    
+    if (!shouldShowFields()) {
+      alert("Үндсэн ангилал сонгоно уу (Please select main category first)")
       return
     }
     
     setIsSubmitting(true)
+    setIsUploadingImages(true)
     
     try {
       // Convert size string to array
@@ -179,26 +373,40 @@ export default function ProductsPage() {
         ? formData.size.split(',').map(s => s.trim()).filter(s => s.length > 0)
         : []
       
-      const productData = {
-        name: formData.name,
-        price: parseFloat(formData.price),
-        stock: parseInt(formData.stock),
-        brand: formData.brand,
-        color: formData.color,
-        size: sizeArray,
-        category: formData.category,
-        subcategory: formData.subcategory,
-        "model number": formData.modelNumber,
+      // Create FormData with product data and images
+      const formDataToSend = new FormData()
+      
+      // Append product fields
+      formDataToSend.append('name', formData.name)
+      formDataToSend.append('code', formData.code)
+      formDataToSend.append('price', formData.price)
+      formDataToSend.append('stock', formData.stock)
+      formDataToSend.append('brand', formData.brand)
+      formDataToSend.append('color', formData.color)
+      formDataToSend.append('size', sizeArray.join(','))
+      formDataToSend.append('material', formData.material)
+      formDataToSend.append('description', formData.description)
+      formDataToSend.append('feature', formData.feature)
+      formDataToSend.append('mainCategory', selectedMainCategory)
+      formDataToSend.append('category', formData.category)
+      formDataToSend.append('subcategory', formData.subcategory || '')
+      formDataToSend.append('modelNumber', formData.modelNumber)
+      
+      // Append new image files
+      imageFiles.forEach((file) => {
+        formDataToSend.append('images', file)
+      })
+      
+      // For updates, include existing images
+      if (editingProduct && productImages.length > 0) {
+        formDataToSend.append('existingImages', JSON.stringify(productImages))
       }
 
       if (editingProduct) {
         // Update existing product
         const response = await fetch(`/api/products/${editingProduct.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(productData),
+          body: formDataToSend,
         })
 
         const result = await response.json()
@@ -212,10 +420,7 @@ export default function ProductsPage() {
         // Create new product
         const response = await fetch("/api/products", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(productData),
+          body: formDataToSend,
         })
 
         const result = await response.json()
@@ -231,6 +436,7 @@ export default function ProductsPage() {
       alert("An error occurred. Please try again.")
     } finally {
       setIsSubmitting(false)
+      setIsUploadingImages(false)
     }
   }
 
@@ -266,8 +472,14 @@ export default function ProductsPage() {
     new Set(products.map((p) => p.brand).filter(Boolean))
   ).sort()
 
-  // Filter products based on selected filters
+  // Filter products based on selected filters and search query
   const filteredProducts = products.filter((product) => {
+    // Search filter - search by product name (case-insensitive)
+    const searchMatch = searchQuery === "" || 
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (product.code && product.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+    
     const categoryMatch = selectedCategory === "all" || product.category === selectedCategory
     const brandMatch = selectedBrand === "all" || product.brand === selectedBrand
     const stockMatch = 
@@ -277,7 +489,7 @@ export default function ProductsPage() {
           ? product.stock > 0 
           : product.stock === 0
     
-    return categoryMatch && brandMatch && stockMatch
+    return searchMatch && categoryMatch && brandMatch && stockMatch
   })
 
   return (
@@ -316,7 +528,7 @@ export default function ProductsPage() {
             <div className="mb-6 p-4 border rounded-lg bg-muted/50">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold">Шүүлт (Filters)</h3>
-                {(selectedCategory !== "all" || selectedStockStatus !== "all" || selectedBrand !== "all") && (
+                {(selectedCategory !== "all" || selectedStockStatus !== "all" || selectedBrand !== "all" || searchQuery !== "") && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -324,6 +536,7 @@ export default function ProductsPage() {
                       setSelectedCategory("all")
                       setSelectedStockStatus("all")
                       setSelectedBrand("all")
+                      setSearchQuery("")
                     }}
                     className="h-8"
                   >
@@ -332,6 +545,21 @@ export default function ProductsPage() {
                   </Button>
                 )}
               </div>
+              
+              {/* Search Input */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Барааны нэрээр хайх... (Search by product name...)"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Category Filter */}
                 <div className="space-y-2">
@@ -484,125 +712,278 @@ export default function ProductsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {/* Main Category Selection - Always show as dropdown (editable) */}
               <div className="grid gap-2">
-                <Label htmlFor="name">Product Name (Нэр)</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                <Label htmlFor="mainCategory">Үндсэн ангилал (Main Category) *</Label>
+                <Select
+                  value={selectedMainCategory}
+                  onValueChange={handleMainCategoryChange}
                   required
-                />
+                >
+                  <SelectTrigger id="mainCategory">
+                    <SelectValue placeholder="Үндсэн ангилал сонгох" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Subcategory Selection - Show after main category is selected or when editing */}
+              {((selectedMainCategory && availableSubcategories.length > 0) || (editingProduct && formData.category)) && (
                 <div className="grid gap-2">
-                  <Label htmlFor="category">Ангилал</Label>
-                  <Input
-                    id="category"
+                  <Label htmlFor="category">Ангилал (Category) *</Label>
+                  <Select
                     value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value })
-                    }
-                    placeholder="ХАБ хувцас хэрэгсэл"
+                    onValueChange={handleSubcategoryChange}
                     required
-                  />
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Ангилал сонгох" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSubcategories.map((subCat) => (
+                        <SelectItem key={subCat.id} value={subCat.id}>
+                          {subCat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              )}
+
+              {/* Sub-subcategory Selection - Show if subcategory has children or when editing with subcategory */}
+              {((formData.category && availableSubSubcategories.length > 0) || (editingProduct && formData.subcategory)) && (
                 <div className="grid gap-2">
-                  <Label htmlFor="subcategory">Дэд ангилал</Label>
-                  <Input
-                    id="subcategory"
+                  <Label htmlFor="subcategory">Дэд ангилал (Subcategory)</Label>
+                  <Select
                     value={formData.subcategory}
-                    onChange={(e) =>
-                      setFormData({ ...formData, subcategory: e.target.value })
-                    }
-                    placeholder="Толгойн хамгаалалт"
-                    required
-                  />
+                    onValueChange={handleSubSubcategoryChange}
+                  >
+                    <SelectTrigger id="subcategory">
+                      <SelectValue placeholder="Дэд ангилал сонгох" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSubSubcategories.map((subSubCat) => (
+                        <SelectItem key={subSubCat.id} value={subSubCat.id}>
+                          {subSubCat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="brand">Brand (Брэнд)</Label>
-                  <Input
-                    id="brand"
-                    value={formData.brand}
-                    onChange={(e) =>
-                      setFormData({ ...formData, brand: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="modelNumber">Модел дугаар</Label>
-                  <Input
-                    id="modelNumber"
-                    value={formData.modelNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, modelNumber: e.target.value })
-                    }
-                    placeholder="MC375xx/A"
-                  />
-                </div>
-              </div>
+              {/* Dynamic Fields - Show only after main category is selected */}
+              {shouldShowFields() && (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Барааны нэр (Product Name) *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="color">Color (Өнгө)</Label>
-                  <Input
-                    id="color"
-                    value={formData.color}
-                    onChange={(e) =>
-                      setFormData({ ...formData, color: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="size">Size (Хэмжээ) - Comma separated</Label>
-                  <Input
-                    id="size"
-                    value={formData.size}
-                    onChange={(e) =>
-                      setFormData({ ...formData, size: e.target.value })
-                    }
-                    placeholder="M, L, XL, XXL"
-                    required
-                  />
-                </div>
-              </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="code">Код (Code)</Label>
+                    <Input
+                      id="code"
+                      value={formData.code}
+                      onChange={(e) =>
+                        setFormData({ ...formData, code: e.target.value })
+                      }
+                      placeholder="Product code"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="price">Price (₮)</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) =>
-                      setFormData({ ...formData, price: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="stock">Stock Quantity (Нөөц)</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stock: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="brand">Брэнд (Brand) *</Label>
+                      <Input
+                        id="brand"
+                        value={formData.brand}
+                        onChange={(e) =>
+                          setFormData({ ...formData, brand: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="color">Өнгө (Color) *</Label>
+                      <Input
+                        id="color"
+                        value={formData.color}
+                        onChange={(e) =>
+                          setFormData({ ...formData, color: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="size">Хэмжээ (Size) *</Label>
+                      <Input
+                        id="size"
+                        value={formData.size}
+                        onChange={(e) =>
+                          setFormData({ ...formData, size: e.target.value })
+                        }
+                        placeholder="M, L, XL, XXL"
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="material">Материал (Material) *</Label>
+                      <Input
+                        id="material"
+                        value={formData.material}
+                        onChange={(e) =>
+                          setFormData({ ...formData, material: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="description">Тодорхойлолт (Description) *</Label>
+                    <textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({ ...formData, description: e.target.value })
+                      }
+                      className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="feature">Онцлог (Feature) *</Label>
+                    <textarea
+                      id="feature"
+                      value={formData.feature}
+                      onChange={(e) =>
+                        setFormData({ ...formData, feature: e.target.value })
+                      }
+                      className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="modelNumber">Модел дугаар (Model Number)</Label>
+                      <Input
+                        id="modelNumber"
+                        value={formData.modelNumber}
+                        onChange={(e) =>
+                          setFormData({ ...formData, modelNumber: e.target.value })
+                        }
+                        placeholder="MC375xx/A"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="price">Үнэ (Price) (₮) *</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.price}
+                        onChange={(e) =>
+                          setFormData({ ...formData, price: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="stock">Нөөц (Stock Quantity) *</Label>
+                    <Input
+                      id="stock"
+                      type="number"
+                      min="0"
+                      value={formData.stock}
+                      onChange={(e) =>
+                        setFormData({ ...formData, stock: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+
+                  {/* Image Upload Section */}
+                  <div className="grid gap-2">
+                    <Label>Зураг (Images) - Хамгийн ихдээ 5 (Maximum 5)</Label>
+                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <input
+                          type="file"
+                          id="image-upload"
+                          accept="image/*"
+                          multiple
+                          onChange={handleImageSelect}
+                          className="hidden"
+                          disabled={imagePreviews.length >= 5 || isUploadingImages}
+                        />
+                        <label
+                          htmlFor="image-upload"
+                          className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                            imagePreviews.length >= 5 || isUploadingImages
+                              ? "border-muted-foreground/25 bg-muted/50 cursor-not-allowed"
+                              : "border-primary/50 bg-muted/30 hover:bg-muted/50"
+                          }`}
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground text-center">
+                            {imagePreviews.length >= 5
+                              ? "Хамгийн ихдээ 5 зураг нэмж болно (Maximum 5 images)"
+                              : "Зураг сонгох эсвэл энд чирнэ үү (Click or drag images here)"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {imagePreviews.length}/5 зураг (images)
+                          </p>
+                        </label>
+                      </div>
+
+                      {/* Image Previews */}
+                      {imagePreviews.length > 0 && (
+                        <div className="grid grid-cols-5 gap-2 mt-4">
+                          {imagePreviews.map((preview, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={preview}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(index)}
+                                className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                disabled={isUploadingImages}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button 

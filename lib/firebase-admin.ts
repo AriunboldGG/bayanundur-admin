@@ -20,14 +20,27 @@ function initializeFirebase() {
   try {
     // Try to use environment variables first (for Vercel/production)
     if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      
+      if (!projectId) {
+        throw new Error("FIREBASE_PROJECT_ID environment variable is not set");
+      }
+
       const serviceAccount = {
-        projectId: process.env.FIREBASE_PROJECT_ID,
+        projectId: projectId,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       };
 
+      // Use explicit bucket name from env, or construct from project ID
+      // Default to new Firebase Storage format: projectId.firebasestorage.app
+      const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+
+      console.log(`Initializing Firebase Admin with project: ${projectId}, bucket: ${storageBucket}`);
+
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+        storageBucket: storageBucket,
       });
 
       console.log("Firebase Admin initialized successfully from environment variables");
@@ -61,8 +74,21 @@ function initializeFirebase() {
       private_key: (serviceAccount.private_key || "").replace(/\\n/g, "\n"),
     };
 
+    const projectId = serviceAccount.project_id;
+    
+    if (!projectId) {
+      throw new Error("project_id is missing from service account file");
+    }
+
+    // Use explicit bucket name from env, or construct from project ID
+    // Default to new Firebase Storage format: projectId.firebasestorage.app
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+
+    console.log(`Initializing Firebase Admin with project: ${projectId}, bucket: ${storageBucket}`);
+
     admin.initializeApp({
       credential: admin.credential.cert(formattedServiceAccount as admin.ServiceAccount),
+      storageBucket: storageBucket,
     });
 
     console.log("Firebase Admin initialized successfully from permissions.json");
@@ -113,6 +139,83 @@ const dbProxy = new Proxy({} as admin.firestore.Firestore, {
     return value;
   }
 });
+
+// Helper function to get Storage bucket
+export function getStorageBucket() {
+  const app = initializeFirebase();
+  if (!app) {
+    throw new Error("Firebase Admin not initialized. Make sure permissions.json exists or environment variables are set.");
+  }
+  
+  const storage = admin.storage();
+  
+  // Get bucket name from app options (set during initialization)
+  let bucketName = app.options.storageBucket;
+  
+  if (!bucketName) {
+    // Try multiple sources for project ID
+    let projectId: string | undefined;
+    
+    // 1. Try from environment variable
+    projectId = process.env.FIREBASE_PROJECT_ID;
+    
+    // 2. Try from app options
+    if (!projectId) {
+      projectId = app.options.projectId;
+    }
+    
+    // 3. Try to extract from credential (if it's a cert credential)
+    if (!projectId && app.options.credential) {
+      const cred = app.options.credential as any;
+      if (cred && typeof cred.getAccessToken === 'function') {
+        // Try to get project ID from credential
+        try {
+          // For cert credentials, we can check the internal projectId
+          if (cred.projectId) {
+            projectId = cred.projectId;
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+    }
+    
+    // 4. Try reading from permissions.json as last resort
+    if (!projectId) {
+      try {
+        const serviceAccountPath = path.join(process.cwd(), "permissions.json");
+        if (fs.existsSync(serviceAccountPath)) {
+          const serviceAccountFile = fs.readFileSync(serviceAccountPath, "utf8");
+          const serviceAccount = JSON.parse(serviceAccountFile);
+          projectId = serviceAccount.project_id;
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    
+    if (!projectId) {
+      console.error("Debug info:", {
+        envProjectId: process.env.FIREBASE_PROJECT_ID,
+        appProjectId: app.options.projectId,
+        appStorageBucket: app.options.storageBucket,
+        hasCredential: !!app.options.credential,
+      });
+      throw new Error(
+        "Cannot determine storage bucket: projectId is undefined. " +
+        "Please set FIREBASE_PROJECT_ID environment variable or ensure project_id is in permissions.json. " +
+        "Your project ID should be: bayanundur-backend"
+      );
+    }
+    
+    // Default to new Firebase Storage format: projectId.firebasestorage.app
+    bucketName = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+    console.warn(`Storage bucket not found in app options, using fallback: ${bucketName} (projectId: ${projectId})`);
+  }
+  
+  console.log(`Using storage bucket: ${bucketName}`);
+  return storage.bucket(bucketName);
+}
 
 export { dbProxy as db };
 export default admin;
