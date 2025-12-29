@@ -19,7 +19,9 @@ function initializeFirebase() {
 
   try {
     // Try to use environment variables first (for Vercel/production)
-    if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+    const hasEnvVars = process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID;
+    
+    if (hasEnvVars) {
       const projectId = process.env.FIREBASE_PROJECT_ID;
       
       if (!projectId) {
@@ -36,15 +38,27 @@ function initializeFirebase() {
       // Default to new Firebase Storage format: projectId.firebasestorage.app
       const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
 
-      console.log(`Initializing Firebase Admin with project: ${projectId}, bucket: ${storageBucket}`);
+      console.log(`[Firebase Admin] Initializing with project: ${projectId}, bucket: ${storageBucket}`);
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
         storageBucket: storageBucket,
       });
 
-      console.log("Firebase Admin initialized successfully from environment variables");
+      console.log("[Firebase Admin] Initialized successfully from environment variables");
       return admin.app();
+    } else {
+      // Log which environment variables are missing
+      const missingVars = [];
+      if (!process.env.FIREBASE_PROJECT_ID) missingVars.push("FIREBASE_PROJECT_ID");
+      if (!process.env.FIREBASE_CLIENT_EMAIL) missingVars.push("FIREBASE_CLIENT_EMAIL");
+      if (!process.env.FIREBASE_PRIVATE_KEY) missingVars.push("FIREBASE_PRIVATE_KEY");
+      
+      if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+        console.error(`[Firebase Admin] Missing required environment variables in production: ${missingVars.join(", ")}`);
+        console.error("[Firebase Admin] Please set these in your deployment platform (Vercel, etc.)");
+        throw new Error(`Missing required environment variables: ${missingVars.join(", ")}. Please configure them in your production environment.`);
+      }
     }
 
     // Fallback to permissions.json file (for local development)

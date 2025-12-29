@@ -130,11 +130,22 @@ export default function ProductsPage() {
         }))
         setProducts(mappedProducts)
       } else {
-        setError(result.error || "Failed to fetch products")
+        const errorMsg = result.error || "Failed to fetch products"
+        // Provide more helpful error message for production issues
+        if (errorMsg.includes("Firebase") || errorMsg.includes("environment") || errorMsg.includes("configuration")) {
+          setError(`${errorMsg}. Please check that Firebase environment variables are configured in production.`)
+        } else {
+          setError(errorMsg)
+        }
       }
     } catch (err: any) {
       console.error("Error fetching products:", err)
-      setError(err?.message || "Failed to load products. Please try again.")
+      let errorMsg = err?.message || "Failed to load products. Please try again."
+      // Check if it's a network/API error
+      if (err?.message?.includes("HTTP error") || err?.message?.includes("fetch")) {
+        errorMsg = "Unable to connect to the server. Please check your network connection and try again."
+      }
+      setError(errorMsg)
     } finally {
       setIsLoading(false)
     }

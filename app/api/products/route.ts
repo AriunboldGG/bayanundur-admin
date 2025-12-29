@@ -5,11 +5,14 @@ import admin from "firebase-admin";
 // GET - Fetch all products (with optional filters)
 export async function GET(request: NextRequest) {
   try {
-    console.log("Fetching products from Firestore...");
+    console.log("[Products API] Fetching products from Firestore...");
     
     // Check if db is initialized
     if (!db) {
-      throw new Error("Firestore database is not initialized. Check Firebase Admin configuration.");
+      const errorMsg = "Firestore database is not initialized. Check Firebase Admin configuration. " +
+        "In production, ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set.";
+      console.error("[Products API]", errorMsg);
+      throw new Error(errorMsg);
     }
     
     const { searchParams } = new URL(request.url);
@@ -36,9 +39,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute query
-    console.log("Executing Firestore query...");
+    console.log("[Products API] Executing Firestore query...");
     const productsSnapshot = await query.get();
-    console.log(`Found ${productsSnapshot.docs.length} products`);
+    console.log(`[Products API] Found ${productsSnapshot.docs.length} products`);
     
     const products = productsSnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -51,18 +54,29 @@ export async function GET(request: NextRequest) {
       count: products.length 
     });
   } catch (error: any) {
-    console.error("Error fetching products:", error);
-    console.error("Error details:", {
+    console.error("[Products API] Error fetching products:", error);
+    console.error("[Products API] Error details:", {
       message: error?.message,
       code: error?.code,
       stack: error?.stack,
+      nodeEnv: process.env.NODE_ENV,
+      hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
+      hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
+      hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
     });
+    
+    // Provide helpful error message for production
+    let errorMessage = error?.message || "Failed to fetch products";
+    if (error?.message?.includes("not initialized") || error?.message?.includes("Missing required")) {
+      errorMessage = "Firebase configuration error. Please check environment variables in production settings.";
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
-        error: error?.message || "Failed to fetch products",
+        error: errorMessage,
         code: error?.code,
-        details: process.env.NODE_ENV === "development" ? error?.stack : undefined
+        details: process.env.NODE_ENV === "development" ? error?.stack : "Check server logs for details"
       },
       { status: 500 }
     );
