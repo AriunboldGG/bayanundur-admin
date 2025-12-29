@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -34,61 +34,7 @@ import { PriceQuote } from "@/lib/types"
 import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType } from "docx"
 import { saveAs } from "file-saver"
 
-// Mock data for price quotes
-const mockQuotes: PriceQuote[] = [
-  {
-    id: "1",
-    firstName: "Бат",
-    lastName: "Дорж",
-    email: "bat.dorj@example.com",
-    phone: "99112233",
-    additionalInfo: "Бид 50 ширхэг малгай, каск захиалах гэж байна.",
-    position: "Худалдан авах менежер",
-    company: "ABC ХХК",
-    selectedProducts: [
-      { productId: "1", productName: "Sample Product 1", quantity: 50, status: "sent_offer" },
-      { productId: "2", productName: "Sample Product 2", quantity: 30, status: "sent_offer" },
-    ],
-    status: "sent_offer",
-    quoteStatus: "new",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    firstName: "Сараа",
-    lastName: "Болд",
-    email: "saraa.bold@example.com",
-    phone: "99223344",
-    additionalInfo: "Хурдан хүргэлт хэрэгтэй байна.",
-    position: "Директор",
-    company: "XYZ Корпораци",
-    selectedProducts: [
-      { productId: "1", productName: "Sample Product 1", quantity: 100, status: "create_invoice" },
-    ],
-    status: "create_invoice",
-    quoteStatus: "in_progress",
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-  },
-  {
-    id: "3",
-    firstName: "Энх",
-    lastName: "Мөнх",
-    email: "enkh.munkh@example.com",
-    phone: "99334455",
-    additionalInfo: "Үнийн санал шаардлагатай.",
-    position: "Худалдан авах ажилтан",
-    company: "DEF Хувьцаат",
-    selectedProducts: [
-      { productId: "2", productName: "Sample Product 2", quantity: 25, status: "spent" },
-      { productId: "3", productName: "Sample Product 3", quantity: 15, status: "sent_offer" },
-    ],
-    status: "sent_offer",
-    quoteStatus: "pending",
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
-    updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), // 8 days ago
-  },
-]
+// Mock data removed - now fetching from Firebase
 
 const statusColors = {
   sent_offer: "bg-blue-100 text-blue-800 border-blue-200",
@@ -106,7 +52,9 @@ const statusLabels = {
 
 
 export default function QuotesPage() {
-  const [quotes, setQuotes] = useState<PriceQuote[]>(mockQuotes)
+  const [quotes, setQuotes] = useState<PriceQuote[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedQuote, setSelectedQuote] = useState<PriceQuote | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSendOfferDialogOpen, setIsSendOfferDialogOpen] = useState(false)
@@ -119,6 +67,56 @@ export default function QuotesPage() {
   const [selectedForSendOffer, setSelectedForSendOffer] = useState<Set<string>>(new Set())
   const [selectedForInvoice, setSelectedForInvoice] = useState<Set<string>>(new Set())
   const [selectedForSpent, setSelectedForSpent] = useState<Set<string>>(new Set())
+
+  // Fetch quotes from Firebase
+  useEffect(() => {
+    fetchQuotes()
+  }, [])
+
+  const fetchQuotes = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      // Build query params for date filtering
+      const params = new URLSearchParams()
+      if (startDate) params.append("startDate", startDate)
+      if (endDate) params.append("endDate", endDate)
+      
+      const url = `/api/quotes${params.toString() ? `?${params.toString()}` : ""}`
+      const response = await fetch(url)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const result = await response.json()
+
+      if (result.success) {
+        setQuotes(result.data || [])
+      } else {
+        setError(result.error || "Failed to fetch quotes")
+      }
+    } catch (err: any) {
+      console.error("Error fetching quotes:", err)
+      setError(err?.message || "Failed to load quotes. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Refetch quotes when date filters change (with debounce)
+  useEffect(() => {
+    // Skip initial load (already handled by first useEffect)
+    if (quotes.length === 0 && isLoading) return
+
+    const timer = setTimeout(() => {
+      fetchQuotes()
+    }, 500) // Debounce for 500ms
+
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate])
 
   const handleViewQuote = (quote: PriceQuote) => {
     setSelectedQuote(quote)
@@ -173,78 +171,130 @@ export default function QuotesPage() {
     }
   }
 
-  const handleProductStatusChange = (
+  const handleProductStatusChange = async (
     quoteId: string,
     productId: string,
     newStatus: "sent_offer" | "create_invoice" | "spent"
   ) => {
-    setQuotes(
-      quotes.map((quote) => {
-        if (quote.id === quoteId) {
-          const updatedProducts = quote.selectedProducts.map((product) =>
-            product.productId === productId
-              ? { ...product, status: newStatus }
-              : product
-          )
-          const newQuoteStatus = calculateQuoteStatus(updatedProducts)
-          return {
-            ...quote,
-            selectedProducts: updatedProducts,
-            status: newQuoteStatus,
-            updatedAt: new Date().toISOString(),
-          }
-        }
-        return quote
-      })
-    )
-    
-    if (selectedQuote?.id === quoteId) {
-      const updatedProducts = selectedQuote.selectedProducts.map((product) =>
+    try {
+      // Find the quote and update the product status
+      const quote = quotes.find(q => q.id === quoteId)
+      if (!quote) return
+
+      const updatedProducts = quote.selectedProducts.map((product) =>
         product.productId === productId
           ? { ...product, status: newStatus }
           : product
       )
       const newQuoteStatus = calculateQuoteStatus(updatedProducts)
-      setSelectedQuote({
-        ...selectedQuote,
-        selectedProducts: updatedProducts,
-        status: newQuoteStatus,
-        updatedAt: new Date().toISOString(),
-      })
-    }
-  }
 
-  const handleQuoteStatusChange = (quoteId: string, newStatus: "new" | "pending" | "in_progress" | "completed" | "rejected") => {
-    // Update the quote status
-    setQuotes(
-      quotes.map((quote) => {
-        if (quote.id === quoteId) {
-          return {
-            ...quote,
-            quoteStatus: newStatus,
-            updatedAt: new Date().toISOString(),
-          }
+      // Save to Firebase
+      const response = await fetch(`/api/quotes/${quoteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selectedProducts: updatedProducts,
+          status: newQuoteStatus,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        // Update local state
+        setQuotes(
+          quotes.map((q) => {
+            if (q.id === quoteId) {
+              return result.data
+            }
+            return q
+          })
+        )
+        
+        if (selectedQuote?.id === quoteId) {
+          setSelectedQuote(result.data)
         }
-        return quote
-      })
-    )
-    if (selectedQuote?.id === quoteId) {
-      setSelectedQuote({
-        ...selectedQuote,
-        quoteStatus: newStatus,
-        updatedAt: new Date().toISOString(),
-      })
+      } else {
+        alert(result.error || "Failed to update product status")
+      }
+    } catch (err: any) {
+      console.error("Error updating product status:", err)
+      alert("Failed to update product status. Please try again.")
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("mn-MN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+  const handleQuoteStatusChange = async (quoteId: string, newStatus: "new" | "pending" | "in_progress" | "completed" | "rejected") => {
+    try {
+      const response = await fetch(`/api/quotes/${quoteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quoteStatus: newStatus }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        // Update local state
+        setQuotes(
+          quotes.map((quote) => {
+            if (quote.id === quoteId) {
+              return result.data
+            }
+            return quote
+          })
+        )
+        if (selectedQuote?.id === quoteId) {
+          setSelectedQuote(result.data)
+        }
+      } else {
+        alert(result.error || "Failed to update quote status")
+      }
+    } catch (err: any) {
+      console.error("Error updating quote status:", err)
+      alert("Failed to update quote status. Please try again.")
+    }
+  }
+
+  const formatDate = (dateString: string | Date | any) => {
+    if (!dateString) return "Огноо байхгүй"
+    
+    try {
+      let date: Date
+      
+      // Handle Firestore Timestamp objects
+      if (dateString && typeof dateString === 'object' && dateString.toDate) {
+        date = dateString.toDate()
+      } 
+      // Handle Firestore Timestamp with seconds/nanoseconds
+      else if (dateString && typeof dateString === 'object' && dateString.seconds) {
+        date = new Date(dateString.seconds * 1000)
+      }
+      // Handle string dates
+      else if (typeof dateString === 'string') {
+        date = new Date(dateString)
+      }
+      // Handle Date objects
+      else if (dateString instanceof Date) {
+        date = dateString
+      }
+      else {
+        date = new Date(dateString)
+      }
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return "Огноо буруу"
+      }
+      
+      return date.toLocaleString("mn-MN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      console.error("Error formatting date:", error, dateString)
+      return "Огноо буруу"
+    }
   }
 
   // Generate Word document for Send Offer
@@ -557,7 +607,7 @@ export default function QuotesPage() {
         "Компани": quote.company,
         "Нэмэлт мэдээлэл": quote.additionalInfo,
         "Сонгосон бараа": products,
-        "Барааны тоо": quote.selectedProducts.length,
+        "Барааны тоо": (quote.selectedProducts || []).length,
         "Төлөв": statusLabels[quote.status] || statusLabels.pending,
         "Шинэчлэгдсэн огноо": quote.updatedAt
           ? formatDate(quote.updatedAt)
@@ -759,6 +809,7 @@ export default function QuotesPage() {
               <TableRow>
                 <TableHead>Огноо</TableHead>
                 <TableHead>Харилцагч</TableHead>
+                <TableHead>Албан тушаал</TableHead>
                 <TableHead>Компани</TableHead>
                 <TableHead>И-мэйл</TableHead>
                 <TableHead>Утас</TableHead>
@@ -768,52 +819,76 @@ export default function QuotesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredQuotes.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8">
+                    Уншиж байна...
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-destructive">
+                    {error}
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={fetchQuotes}
+                    >
+                      Дахин оролдох
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ) : filteredQuotes.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     {quotes.length === 0 
                       ? "No quote requests found."
                       : `No quotes found for selected date range${startDate || endDate ? ` (${startDate || "..."} - ${endDate || "..."})` : ""}.`}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredQuotes.map((quote) => (
-                  <TableRow key={quote.id}>
-                    <TableCell>{formatDate(quote.createdAt)}</TableCell>
-                    <TableCell className="font-medium">
-                      {quote.firstName} {quote.lastName}
-                    </TableCell>
-                    <TableCell>{quote.company}</TableCell>
-                    <TableCell>{quote.email}</TableCell>
-                    <TableCell>{quote.phone}</TableCell>
-                    <TableCell>{quote.selectedProducts.length}</TableCell>
-                    <TableCell>
-                      <Badge className={getDisplayStatus(quote).color}>
-                        {getDisplayStatus(quote).label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleViewQuote(quote)}
-                          title="Дэлгэрэнгүй харах"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDownloadSingleQuote(quote)}
-                          title="Excel татах"
-                        >
-                          <FileDown className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredQuotes.map((quote) => {
+                  // Use items from Firestore (mapped to selectedProducts in API)
+                  const items = quote.selectedProducts || []
+                  return (
+                    <TableRow key={quote.id}>
+                      <TableCell>{formatDate(quote.createdAt)}</TableCell>
+                      <TableCell className="font-medium">
+                        {quote.firstName} {quote.lastName}
+                      </TableCell>
+                      <TableCell>{quote.position || "-"}</TableCell>
+                      <TableCell>{quote.company}</TableCell>
+                      <TableCell>{quote.email}</TableCell>
+                      <TableCell>{quote.phone}</TableCell>
+                      <TableCell>{items.length}</TableCell>
+                      <TableCell>
+                        <Badge className={getDisplayStatus(quote).color}>
+                          {getDisplayStatus(quote).label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewQuote(quote)}
+                            title="Дэлгэрэнгүй харах"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDownloadSingleQuote(quote)}
+                            title="Excel татах"
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -826,9 +901,7 @@ export default function QuotesPage() {
             <>
               <DialogHeader>
                 <DialogTitle>Үнийн санал авах хүсэлт</DialogTitle>
-                <DialogDescription>
-                  Quote request details and selected products
-                </DialogDescription>
+              
               </DialogHeader>
 
               <div className="space-y-6 py-4">
@@ -875,14 +948,22 @@ export default function QuotesPage() {
                   </div>
                 </div>
 
-                {/* Additional Information */}
+                {/* Additional Information / Note */}
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
-                    Нэмэлт мэдээлэл
+                    Нэмэлт мэдээлэл (Note)
                   </label>
-                  <p className="text-sm mt-1 p-3 bg-muted rounded-md">
-                    {selectedQuote.additionalInfo}
-                  </p>
+                  <div className="mt-1 p-3 bg-muted rounded-md min-h-[80px]">
+                    {selectedQuote.additionalInfo ? (
+                      <p className="text-sm whitespace-pre-wrap break-words">
+                        {selectedQuote.additionalInfo}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        Нэмэлт мэдээлэл байхгүй (No additional information)
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Selected Products */}
@@ -901,16 +982,47 @@ export default function QuotesPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedQuote.selectedProducts.map((product, index) => {
-                          const productStatus = product.status || "pending"
-                          return (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium">
-                                {product.productName}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {product.quantity || "N/A"}
-                              </TableCell>
+                        {(() => {
+                          // Use items from Firestore (mapped to selectedProducts in API)
+                          const items = selectedQuote.selectedProducts || []
+                          
+                          if (items.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
+                                  Бараа олдсонгүй (No products found)
+                                </TableCell>
+                              </TableRow>
+                            )
+                          }
+                          
+                          return items.map((product: any, index: number) => {
+                            // Type the status properly to avoid 'any' indexing errors
+                            type ProductStatus = "sent_offer" | "create_invoice" | "spent" | "pending"
+                            const productStatus: ProductStatus = 
+                              (product.status && ["sent_offer", "create_invoice", "spent", "pending"].includes(product.status))
+                                ? product.status as ProductStatus
+                                : "pending"
+                            // Handle different field names from Firestore
+                            const productName = product.productName || product.name || product.product || "Unknown Product"
+                            const productId = product.productId || product.id || `product-${index}`
+                            // Handle quantity from items array - check multiple field name variations
+                            const quantity = product.quantity !== undefined && product.quantity !== null 
+                              ? product.quantity 
+                              : (product.qty !== undefined && product.qty !== null 
+                                  ? product.qty 
+                                  : (product.amount !== undefined && product.amount !== null 
+                                      ? product.amount 
+                                      : "N/A"))
+                            
+                            return (
+                              <TableRow key={index}>
+                                <TableCell className="font-medium">
+                                  {productName}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {quantity}
+                                </TableCell>
                               <TableCell className="text-center">
                                 <Badge className={statusColors[productStatus]}>
                                   {statusLabels[productStatus]}
@@ -919,13 +1031,13 @@ export default function QuotesPage() {
                               <TableCell className="text-center">
                                 <input
                                   type="checkbox"
-                                  checked={selectedForSendOffer.has(product.productId)}
+                                  checked={selectedForSendOffer.has(productId)}
                                   onChange={(e) => {
                                     const newSet = new Set(selectedForSendOffer)
                                     if (e.target.checked) {
-                                      newSet.add(product.productId)
+                                      newSet.add(productId)
                                     } else {
-                                      newSet.delete(product.productId)
+                                      newSet.delete(productId)
                                     }
                                     setSelectedForSendOffer(newSet)
                                   }}
@@ -935,13 +1047,13 @@ export default function QuotesPage() {
                               <TableCell className="text-center">
                                 <input
                                   type="checkbox"
-                                  checked={selectedForInvoice.has(product.productId)}
+                                  checked={selectedForInvoice.has(productId)}
                                   onChange={(e) => {
                                     const newSet = new Set(selectedForInvoice)
                                     if (e.target.checked) {
-                                      newSet.add(product.productId)
+                                      newSet.add(productId)
                                     } else {
-                                      newSet.delete(product.productId)
+                                      newSet.delete(productId)
                                     }
                                     setSelectedForInvoice(newSet)
                                   }}
@@ -951,13 +1063,13 @@ export default function QuotesPage() {
                               <TableCell className="text-center">
                                 <input
                                   type="checkbox"
-                                  checked={selectedForSpent.has(product.productId)}
+                                  checked={selectedForSpent.has(productId)}
                                   onChange={(e) => {
                                     const newSet = new Set(selectedForSpent)
                                     if (e.target.checked) {
-                                      newSet.add(product.productId)
+                                      newSet.add(productId)
                                     } else {
-                                      newSet.delete(product.productId)
+                                      newSet.delete(productId)
                                     }
                                     setSelectedForSpent(newSet)
                                   }}
@@ -966,7 +1078,8 @@ export default function QuotesPage() {
                               </TableCell>
                             </TableRow>
                           )
-                        })}
+                          })
+                        })()}
                       </TableBody>
                     </Table>
                   </div>
