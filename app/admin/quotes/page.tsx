@@ -566,17 +566,19 @@ export default function QuotesPage() {
       try {
         // Parse quote date - handle various formats
         let quoteDate: Date
-        if (quote.createdAt) {
-          if (typeof quote.createdAt === 'string') {
-            quoteDate = new Date(quote.createdAt)
-          } else if (quote.createdAt instanceof Date) {
-            quoteDate = quote.createdAt
-          } else if (quote.createdAt.toDate && typeof quote.createdAt.toDate === 'function') {
-            quoteDate = quote.createdAt.toDate()
-          } else if (quote.createdAt.seconds) {
-            quoteDate = new Date(quote.createdAt.seconds * 1000)
+        const createdAt = quote.createdAt as any // Use 'as any' to handle different possible types
+        
+        if (createdAt) {
+          if (typeof createdAt === 'string') {
+            quoteDate = new Date(createdAt)
+          } else if (createdAt instanceof Date) {
+            quoteDate = createdAt
+          } else if (createdAt.toDate && typeof createdAt.toDate === 'function') {
+            quoteDate = createdAt.toDate()
+          } else if (createdAt.seconds) {
+            quoteDate = new Date(createdAt.seconds * 1000)
           } else {
-            quoteDate = new Date(quote.createdAt)
+            quoteDate = new Date(createdAt)
           }
         } else {
           return false // Skip quotes without createdAt
