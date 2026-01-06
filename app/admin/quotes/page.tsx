@@ -556,32 +556,61 @@ export default function QuotesPage() {
     saveAs(blob, `Expense_Receipt_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
   }
 
-  // Filter quotes by date range
+  // Filter quotes by date range (client-side fallback if server-side filtering fails)
   const getFilteredQuotes = (): PriceQuote[] => {
     if (!startDate && !endDate) {
       return quotes
     }
     
     return quotes.filter((quote) => {
-      const quoteDate = new Date(quote.createdAt)
-      const quoteDateOnly = new Date(quoteDate.getFullYear(), quoteDate.getMonth(), quoteDate.getDate())
-      
-      if (startDate && endDate) {
-        const start = new Date(startDate)
-        const end = new Date(endDate)
-        // Set time to end of day for endDate to include the entire day
-        end.setHours(23, 59, 59, 999)
-        return quoteDateOnly >= start && quoteDateOnly <= end
-      } else if (startDate) {
-        const start = new Date(startDate)
-        return quoteDateOnly >= start
-      } else if (endDate) {
-        const end = new Date(endDate)
-        end.setHours(23, 59, 59, 999)
-        return quoteDateOnly <= end
+      try {
+        // Parse quote date - handle various formats
+        let quoteDate: Date
+        if (quote.createdAt) {
+          if (typeof quote.createdAt === 'string') {
+            quoteDate = new Date(quote.createdAt)
+          } else if (quote.createdAt instanceof Date) {
+            quoteDate = quote.createdAt
+          } else if (quote.createdAt.toDate && typeof quote.createdAt.toDate === 'function') {
+            quoteDate = quote.createdAt.toDate()
+          } else if (quote.createdAt.seconds) {
+            quoteDate = new Date(quote.createdAt.seconds * 1000)
+          } else {
+            quoteDate = new Date(quote.createdAt)
+          }
+        } else {
+          return false // Skip quotes without createdAt
+        }
+        
+        // Check if date is valid
+        if (isNaN(quoteDate.getTime())) {
+          return false
+        }
+        
+        // Normalize to date only (remove time)
+        const quoteDateOnly = new Date(quoteDate.getFullYear(), quoteDate.getMonth(), quoteDate.getDate())
+        
+        if (startDate && endDate) {
+          const start = new Date(startDate)
+          start.setHours(0, 0, 0, 0)
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          return quoteDateOnly >= start && quoteDateOnly <= end
+        } else if (startDate) {
+          const start = new Date(startDate)
+          start.setHours(0, 0, 0, 0)
+          return quoteDateOnly >= start
+        } else if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          return quoteDateOnly <= end
+        }
+        
+        return true
+      } catch (error) {
+        console.error("Error filtering quote by date:", error, quote)
+        return false
       }
-      
-      return true
     })
   }
 

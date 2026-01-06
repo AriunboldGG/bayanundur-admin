@@ -17,30 +17,49 @@ export async function GET(request: NextRequest) {
     }
     
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
 
     // Start with base query
     let query: admin.firestore.Query = db.collection("quotes");
 
+    // Convert date strings to Firestore Timestamps for proper comparison
+    // Date format from input: "YYYY-MM-DD"
+    let startDateTimestamp: admin.firestore.Timestamp | null = null;
+    let endDateTimestamp: admin.firestore.Timestamp | null = null;
+
+    if (startDateParam) {
+      // Parse the date string and set to start of day
+      const startDate = new Date(startDateParam);
+      startDate.setHours(0, 0, 0, 0);
+      startDateTimestamp = admin.firestore.Timestamp.fromDate(startDate);
+    }
+
+    if (endDateParam) {
+      // Parse the date string and set to end of day
+      const endDate = new Date(endDateParam);
+      endDate.setHours(23, 59, 59, 999);
+      endDateTimestamp = admin.firestore.Timestamp.fromDate(endDate);
+    }
+
     // Add date filters if provided
     // Note: Firestore requires an index for range queries on different fields
     // If you get an index error, create the index in Firebase Console
-    if (startDate && endDate) {
+    if (startDateTimestamp && endDateTimestamp) {
       // Both dates provided - use range query
       query = query
-        .where("createdAt", ">=", startDate)
-        .where("createdAt", "<=", endDate)
+        .where("createdAt", ">=", startDateTimestamp)
+        .where("createdAt", "<=", endDateTimestamp)
         .orderBy("createdAt", "desc");
-    } else if (startDate) {
+    } else if (startDateTimestamp) {
       // Only start date
       query = query
-        .where("createdAt", ">=", startDate)
+        .where("createdAt", ">=", startDateTimestamp)
         .orderBy("createdAt", "desc");
-    } else if (endDate) {
+    } else if (endDateTimestamp) {
       // Only end date
       query = query
-        .where("createdAt", "<=", endDate)
+        .where("createdAt", "<=", endDateTimestamp)
         .orderBy("createdAt", "desc");
     } else {
       // No date filters - just order by createdAt
