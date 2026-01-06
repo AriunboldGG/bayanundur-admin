@@ -19,19 +19,30 @@ function initializeFirebase() {
 
   try {
     // Try to use environment variables first (for Vercel/production)
-    const hasEnvVars = process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID;
+    // All sensitive data MUST come from environment variables
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
     
-    if (hasEnvVars) {
-      const projectId = process.env.FIREBASE_PROJECT_ID;
-      
+    if (projectId && clientEmail && privateKey) {
+      // Validate that all required environment variables are set
       if (!projectId) {
         throw new Error("FIREBASE_PROJECT_ID environment variable is not set");
       }
+      
+      if (!clientEmail) {
+        throw new Error("FIREBASE_CLIENT_EMAIL environment variable is not set");
+      }
+      
+      if (!privateKey) {
+        throw new Error("FIREBASE_PRIVATE_KEY environment variable is not set");
+      }
 
+      // All sensitive data comes from environment variables - never hardcoded
       const serviceAccount = {
         projectId: projectId,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+        clientEmail: clientEmail,
+        privateKey: privateKey.replace(/\\n/g, "\n"), // Replace escaped newlines with actual newlines
       };
 
       // Use explicit bucket name from env, or construct from project ID
