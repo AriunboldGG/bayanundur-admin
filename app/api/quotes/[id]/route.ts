@@ -5,10 +5,12 @@ import { PriceQuote } from "@/lib/types";
 // GET - Fetch a single quote by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
     console.log(`[Quotes API] Fetching quote ${id}...`);
     
     if (!db) {
@@ -129,10 +131,12 @@ export async function GET(
 // PUT - Update a quote
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
     console.log(`[Quotes API] Updating quote ${id}...`);
     
     if (!db) {
@@ -142,20 +146,38 @@ export async function PUT(
     const quoteData = await request.json();
     
     // Build update object (only include fields that are provided)
-    const updateData: Partial<PriceQuote> = {
+    // Filter out empty strings as Firestore doesn't allow them
+    const updateData: any = {
       updatedAt: new Date().toISOString(),
     };
 
-    if (quoteData.firstName !== undefined) updateData.firstName = quoteData.firstName;
-    if (quoteData.lastName !== undefined) updateData.lastName = quoteData.lastName;
-    if (quoteData.email !== undefined) updateData.email = quoteData.email;
-    if (quoteData.phone !== undefined) updateData.phone = quoteData.phone;
-    if (quoteData.additionalInfo !== undefined) updateData.additionalInfo = quoteData.additionalInfo;
-    if (quoteData.position !== undefined) updateData.position = quoteData.position;
-    if (quoteData.company !== undefined) updateData.company = quoteData.company;
-    if (quoteData.selectedProducts !== undefined) updateData.selectedProducts = quoteData.selectedProducts;
-    if (quoteData.status !== undefined) updateData.status = quoteData.status;
-    if (quoteData.quoteStatus !== undefined) updateData.quoteStatus = quoteData.quoteStatus;
+    // Helper function to safely add field (skip empty strings)
+    const addField = (key: string, value: any) => {
+      if (value !== undefined) {
+        // Only skip if it's an empty string, allow other falsy values like 0, false, null
+        if (value !== "") {
+          updateData[key] = value;
+        }
+      }
+    };
+
+    addField("firstName", quoteData.firstName);
+    addField("lastName", quoteData.lastName);
+    addField("email", quoteData.email);
+    addField("phone", quoteData.phone);
+    addField("additionalInfo", quoteData.additionalInfo);
+    addField("position", quoteData.position);
+    addField("company", quoteData.company);
+    
+    // Handle selectedProducts/items - always include if provided (even if empty array)
+    if (quoteData.selectedProducts !== undefined) {
+      updateData.selectedProducts = quoteData.selectedProducts;
+      // Also update 'items' field for backward compatibility
+      updateData.items = quoteData.selectedProducts;
+    }
+    
+    addField("status", quoteData.status);
+    addField("quoteStatus", quoteData.quoteStatus);
 
     await db.collection("quotes").doc(id).update(updateData);
 
@@ -189,10 +211,12 @@ export async function PUT(
 // DELETE - Delete a quote
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
     console.log(`[Quotes API] Deleting quote ${id}...`);
     
     if (!db) {

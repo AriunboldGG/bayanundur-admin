@@ -27,18 +27,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, Trash2, X, Upload, XCircle, Search } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Upload, XCircle, Search, Check } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { categories, Category } from "@/lib/categories"
 
 interface Product {
   id: string
   name: string
-  code?: string
   price: number
   stock: number
   brand: string
-  color: string
+  color: string[] | string // Can be array or string
   size: string[] | string // Can be array or string
   material?: string
   description?: string
@@ -47,6 +47,7 @@ interface Product {
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
   "model number"?: string // Модел дугаар (Model number)
+  productTypes?: string[] // Product types array (BEST SELLER, NEW, etc.)
   images?: string[] // Product images URLs
 }
 
@@ -64,7 +65,6 @@ export default function ProductsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
-    code: "", // Барааны нэр: Код
     price: "",
     stock: "",
     brand: "",
@@ -77,7 +77,17 @@ export default function ProductsPage() {
     category: "", // Ангилал (subcategory)
     subcategory: "", // Дэд ангилал (sub-subcategory if exists)
     modelNumber: "", // Модел дугаар
+    productTypes: [] as string[], // Product types array
   })
+  
+  // Product types options
+  const productTypeOptions = [
+    { value: "BEST SELLER", label: "BEST SELLER" },
+    { value: "NEW", label: "ШИНЭ (NEW)" },
+    { value: "DISCOUNTED", label: "ХЯМДРАЛТАЙ (DISCOUNTED)" },
+    { value: "PROMOTION", label: "ПРОМОУШН (PROMOTION)" },
+    { value: "RECOMMEND", label: "САНАЛ БОЛГОХ (RECOMMEND)" },
+  ]
   
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>("")
   const [availableSubcategories, setAvailableSubcategories] = useState<Category[]>([])
@@ -109,15 +119,18 @@ export default function ProductsPage() {
         const mappedProducts = result.data.map((product: any) => ({
           id: product.id,
           name: product.name || "",
-          code: product.code || "",
           price: product.price || 0,
           stock: product.stock || 0,
           brand: product.brand || "",
-          color: product.color || "",
+          color: Array.isArray(product.color) 
+            ? product.color 
+            : typeof product.color === 'string' 
+              ? product.color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0)
+              : [],
           size: Array.isArray(product.size) 
             ? product.size 
             : typeof product.size === 'string' 
-              ? product.size.split(',').map((s: string) => s.trim())
+              ? product.size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
               : [],
           material: product.material || "",
           description: product.description || "",
@@ -125,7 +138,8 @@ export default function ProductsPage() {
           mainCategory: product.mainCategory || "",
           category: product.category || "",
           subcategory: product.subcategory || "",
-          "model number": product["model number"] || product.modelNumber || "",
+          "model number": product["model number"] || product.model_number || product.modelNumber || "",
+          productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
           images: product.images || [],
         }))
         setProducts(mappedProducts)
@@ -157,15 +171,17 @@ export default function ProductsPage() {
       const sizeValue = Array.isArray(product.size) 
         ? product.size.join(", ") 
         : product.size || ""
+      const colorValue = Array.isArray(product.color) 
+        ? product.color.join(", ") 
+        : product.color || ""
       
       // Set all existing product data
       setFormData({
         name: product.name || "",
-        code: product.code || "",
         price: product.price.toString(),
         stock: product.stock.toString(),
         brand: product.brand || "",
-        color: product.color || "",
+        color: colorValue,
         size: sizeValue,
         material: product.material || "",
         description: product.description || "",
@@ -174,6 +190,7 @@ export default function ProductsPage() {
         category: product.category || "",
         subcategory: product.subcategory || "",
         modelNumber: product["model number"] || "",
+        productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
       })
       
       // Set existing images
@@ -221,7 +238,6 @@ export default function ProductsPage() {
       setEditingProduct(null)
       setFormData({
         name: "",
-        code: "",
         price: "",
         stock: "",
         brand: "",
@@ -234,6 +250,7 @@ export default function ProductsPage() {
         category: "",
         subcategory: "",
         modelNumber: "",
+        productTypes: [],
       })
       setSelectedMainCategory("")
       setAvailableSubcategories([])
@@ -247,7 +264,6 @@ export default function ProductsPage() {
     setEditingProduct(null)
     setFormData({
       name: "",
-      code: "",
       price: "",
       stock: "",
       brand: "",
@@ -459,9 +475,12 @@ export default function ProductsPage() {
     setIsUploadingImages(true)
     
     try {
-      // Convert size string to array
+      // Convert size and color strings to arrays
       const sizeArray = formData.size
         ? formData.size.split(',').map(s => s.trim()).filter(s => s.length > 0)
+        : []
+      const colorArray = formData.color
+        ? formData.color.split(',').map(c => c.trim()).filter(c => c.length > 0)
         : []
       
       // Get category names from IDs - always convert IDs to names
@@ -485,11 +504,10 @@ export default function ProductsPage() {
       
       // Append product fields
       formDataToSend.append('name', formData.name)
-      formDataToSend.append('code', formData.code)
       formDataToSend.append('price', formData.price)
       formDataToSend.append('stock', formData.stock)
       formDataToSend.append('brand', formData.brand)
-      formDataToSend.append('color', formData.color)
+      formDataToSend.append('color', colorArray.join(','))
       formDataToSend.append('size', sizeArray.join(','))
       formDataToSend.append('material', formData.material)
       formDataToSend.append('description', formData.description)
@@ -497,7 +515,8 @@ export default function ProductsPage() {
       formDataToSend.append('mainCategory', mainCategoryName) // Send name instead of ID
       formDataToSend.append('category', categoryName) // Send name instead of ID
       formDataToSend.append('subcategory', subcategoryName) // Send name instead of ID
-      formDataToSend.append('modelNumber', formData.modelNumber)
+      formDataToSend.append('model_number', formData.modelNumber)
+      formDataToSend.append('productTypes', JSON.stringify(formData.productTypes))
       
       // Append new image files
       imageFiles.forEach((file) => {
@@ -584,7 +603,6 @@ export default function ProductsPage() {
     // Search filter - search by product name (case-insensitive)
     const searchMatch = searchQuery === "" || 
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (product.code && product.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase()))
     
     const categoryMatch = selectedCategory === "all" || product.category === selectedCategory
@@ -767,6 +785,9 @@ export default function ProductsPage() {
                     const sizeDisplay = Array.isArray(product.size) 
                       ? product.size.join(", ") 
                       : product.size || ""
+                    const colorDisplay = Array.isArray(product.color) 
+                      ? product.color.join(", ") 
+                      : product.color || ""
                     // Convert category IDs to names for display (handle both old IDs and new names)
                     // Check if it looks like an ID
                     // Main category: single digit like "1", "2", "3"
@@ -793,7 +814,7 @@ export default function ProductsPage() {
                         <TableCell>{categoryDisplay}</TableCell>
                         <TableCell>{subcategoryDisplay}</TableCell>
                         <TableCell>{product["model number"] || "-"}</TableCell>
-                        <TableCell>{product.color}</TableCell>
+                        <TableCell>{colorDisplay}</TableCell>
                         <TableCell>{sizeDisplay}</TableCell>
                         <TableCell>{product.price}₮</TableCell>
                         <TableCell>{product.stock}</TableCell>
@@ -920,18 +941,6 @@ export default function ProductsPage() {
                     />
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="code">Код (Code)</Label>
-                    <Input
-                      id="code"
-                      value={formData.code}
-                      onChange={(e) =>
-                        setFormData({ ...formData, code: e.target.value })
-                      }
-                      placeholder="Product code"
-                    />
-                  </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="brand">Брэнд (Brand) *</Label>
@@ -952,6 +961,7 @@ export default function ProductsPage() {
                         onChange={(e) =>
                           setFormData({ ...formData, color: e.target.value })
                         }
+                        placeholder="Red, Blue, Green"
                         required
                       />
                     </div>
@@ -1049,6 +1059,91 @@ export default function ProductsPage() {
                       }
                       required
                     />
+                  </div>
+
+                  {/* Product Types Multiselect */}
+                  <div className="grid gap-2">
+                    <Label>Бүтээгдэхүүний төрөл (Product Type)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left font-normal"
+                        >
+                          {formData.productTypes.length > 0
+                            ? `${formData.productTypes.length} төрөл сонгогдсон (${formData.productTypes.length} selected)`
+                            : "Төрөл сонгох (Select types)"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0" align="start">
+                        <div className="p-2 space-y-2">
+                          {productTypeOptions.map((option) => {
+                            const isSelected = formData.productTypes.includes(option.value);
+                            return (
+                              <div
+                                key={option.value}
+                                className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setFormData({
+                                      ...formData,
+                                      productTypes: formData.productTypes.filter(
+                                        (type) => type !== option.value
+                                      ),
+                                    });
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      productTypes: [...formData.productTypes, option.value],
+                                    });
+                                  }
+                                }}
+                              >
+                                <div
+                                  className={`flex h-4 w-4 items-center justify-center rounded-sm border ${
+                                    isSelected
+                                      ? "bg-primary border-primary text-primary-foreground"
+                                      : "border-input"
+                                  }`}
+                                >
+                                  {isSelected && <Check className="h-3 w-3" />}
+                                </div>
+                                <Label className="cursor-pointer flex-1">
+                                  {option.label}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {formData.productTypes.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.productTypes.map((type) => {
+                          const option = productTypeOptions.find((opt) => opt.value === type);
+                          return (
+                            <div
+                              key={type}
+                              className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-md text-sm"
+                            >
+                              <span>{option?.label || type}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    productTypes: formData.productTypes.filter((t) => t !== type),
+                                  });
+                                }}
+                                className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Image Upload Section */}

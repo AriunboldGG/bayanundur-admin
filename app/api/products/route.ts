@@ -169,13 +169,23 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData();
       
       // Extract product fields from FormData
+      const productTypesValue = formData.get("productTypes") as string;
+      let productTypes: string[] = [];
+      if (productTypesValue) {
+        try {
+          productTypes = JSON.parse(productTypesValue);
+        } catch (e) {
+          // If parsing fails, treat as comma-separated string
+          productTypes = productTypesValue.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+        }
+      }
+      
       productData = {
         name: formData.get("name") as string,
-        code: formData.get("code") as string || "",
         price: parseFloat(formData.get("price") as string),
         stock: parseInt(formData.get("stock") as string),
         brand: formData.get("brand") as string,
-        color: formData.get("color") as string,
+        color: formData.get("color") ? (formData.get("color") as string).split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [],
         size: formData.get("size") ? (formData.get("size") as string).split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [],
         material: formData.get("material") as string || "",
         description: formData.get("description") as string || "",
@@ -183,7 +193,8 @@ export async function POST(request: NextRequest) {
         mainCategory: formData.get("mainCategory") as string || "",
         category: formData.get("category") as string,
         subcategory: formData.get("subcategory") as string || "",
-        "model number": formData.get("modelNumber") as string || "",
+        model_number: formData.get("model_number") as string || "",
+        productTypes: productTypes,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -217,22 +228,21 @@ export async function POST(request: NextRequest) {
         size, 
         category, 
         subcategory, 
-        "model number": modelNumber,
+        model_number,
         images,
-        code,
         material,
         description,
         feature,
         mainCategory,
+        productTypes,
       } = body;
 
       productData = {
         name,
-        code: code || "",
         price: typeof price === 'number' ? price : parseFloat(price),
         stock: typeof stock === 'number' ? stock : parseInt(stock),
         brand,
-        color,
+        color: Array.isArray(color) ? color : (color ? color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : []),
         size: Array.isArray(size) ? size : (size ? size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : []),
         material: material || "",
         description: description || "",
@@ -240,7 +250,8 @@ export async function POST(request: NextRequest) {
         mainCategory: mainCategory || "",
         category: category || "",
         subcategory: subcategory || "",
-        "model number": modelNumber || "",
+        model_number: model_number || "",
+        productTypes: Array.isArray(productTypes) ? productTypes : [],
         images: images || [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

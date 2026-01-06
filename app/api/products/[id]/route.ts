@@ -4,10 +4,13 @@ import { db, getStorageBucket } from "@/lib/firebase-admin";
 // GET - Get a single product by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
+    
     const doc = await db.collection("products").doc(id).get();
 
     if (!doc.exists) {
@@ -17,14 +20,50 @@ export async function GET(
       );
     }
 
+    const productData = doc.data();
+    
+    // Ensure color and size are arrays for consistency
+    if (productData) {
+      // Handle color field - ensure it's an array
+      if (productData.color) {
+        if (!Array.isArray(productData.color)) {
+          productData.color = typeof productData.color === 'string' 
+            ? productData.color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0)
+            : [];
+        }
+      } else {
+        productData.color = [];
+      }
+      
+      // Handle size field - ensure it's an array
+      if (productData.size) {
+        if (!Array.isArray(productData.size)) {
+          productData.size = typeof productData.size === 'string' 
+            ? productData.size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+            : [];
+        }
+      } else {
+        productData.size = [];
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: { id: doc.id, ...doc.data() },
+      data: { id: doc.id, ...productData },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching product:", error);
+    console.error("Error details:", {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    });
     return NextResponse.json(
-      { success: false, error: "Failed to fetch product" },
+      { 
+        success: false, 
+        error: error?.message || "Failed to fetch product",
+        details: process.env.NODE_ENV === "development" ? error?.stack : undefined
+      },
       { status: 500 }
     );
   }
@@ -105,10 +144,12 @@ async function uploadImagesToStorage(files: File[]): Promise<string[]> {
 // PUT - Update a product (supports both JSON and FormData)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
     const contentType = request.headers.get("content-type") || "";
     
     let productData: any;
@@ -125,21 +166,34 @@ export async function PUT(
       const existingImages = existingData?.images || [];
       
       // Extract product fields from FormData
+      const colorValue = formData.get("color") as string;
+      const sizeValue = formData.get("size") as string;
+      const productTypesValue = formData.get("productTypes") as string;
+      let productTypes: string[] = [];
+      if (productTypesValue) {
+        try {
+          productTypes = JSON.parse(productTypesValue);
+        } catch (e) {
+          // If parsing fails, treat as comma-separated string
+          productTypes = productTypesValue.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+        }
+      }
+      
       productData = {
         name: formData.get("name") as string,
-        code: formData.get("code") as string || "",
         price: parseFloat(formData.get("price") as string),
         stock: parseInt(formData.get("stock") as string),
         brand: formData.get("brand") as string,
-        color: formData.get("color") as string,
-        size: formData.get("size") ? (formData.get("size") as string).split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [],
+        color: colorValue ? colorValue.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [],
+        size: sizeValue ? sizeValue.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [],
         material: formData.get("material") as string || "",
         description: formData.get("description") as string || "",
         feature: formData.get("feature") as string || "",
         mainCategory: formData.get("mainCategory") as string || "",
         category: formData.get("category") as string,
         subcategory: formData.get("subcategory") as string || "",
-        "model number": formData.get("modelNumber") as string || "",
+        model_number: formData.get("model_number") as string || "",
+        productTypes: productTypes,
         updatedAt: new Date().toISOString(),
       };
 
@@ -176,22 +230,21 @@ export async function PUT(
         size, 
         category, 
         subcategory, 
-        "model number": modelNumber,
+        model_number,
         images,
-        code,
         material,
         description,
         feature,
         mainCategory,
+        productTypes,
       } = body;
 
       productData = {
         name,
-        code: code || "",
         price: typeof price === 'number' ? price : parseFloat(price),
         stock: typeof stock === 'number' ? stock : parseInt(stock),
         brand,
-        color,
+        color: Array.isArray(color) ? color : (color ? color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : []),
         size: Array.isArray(size) ? size : (size ? size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : []),
         material: material || "",
         description: description || "",
@@ -199,7 +252,8 @@ export async function PUT(
         mainCategory: mainCategory || "",
         category: category || "",
         subcategory: subcategory || "",
-        "model number": modelNumber || "",
+        model_number: model_number || "",
+        productTypes: Array.isArray(productTypes) ? productTypes : [],
         images: images || [],
         updatedAt: new Date().toISOString(),
       };
@@ -223,10 +277,12 @@ export async function PUT(
 // DELETE - Delete a product
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Handle both sync and async params (Next.js 15+ uses Promise)
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { id } = resolvedParams;
     await db.collection("products").doc(id).delete();
 
     return NextResponse.json({
