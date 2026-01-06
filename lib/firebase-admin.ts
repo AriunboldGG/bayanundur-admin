@@ -73,6 +73,7 @@ function initializeFirebase() {
     }
 
     // Fallback to permissions.json file (for local development)
+    // But still prioritize environment variables for project ID and storage bucket
     const serviceAccountPath = path.join(process.cwd(), "permissions.json");
     
     // Check if file exists
@@ -99,17 +100,19 @@ function initializeFirebase() {
       private_key: (serviceAccount.private_key || "").replace(/\\n/g, "\n"),
     };
 
-    const projectId = serviceAccount.project_id;
+    // Prioritize environment variable for project ID (for Vercel/production)
+    // Fallback to project_id from service account file
+    const fallbackProjectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id;
     
-    if (!projectId) {
-      throw new Error("project_id is missing from service account file");
+    if (!fallbackProjectId) {
+      throw new Error("project_id is missing. Please set FIREBASE_PROJECT_ID environment variable or ensure project_id is in service account file");
     }
 
     // Use explicit bucket name from env, or construct from project ID
     // Default to new Firebase Storage format: projectId.firebasestorage.app
-    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${fallbackProjectId}.firebasestorage.app`;
 
-    console.log(`Initializing Firebase Admin with project: ${projectId}, bucket: ${storageBucket}`);
+    console.log(`Initializing Firebase Admin with project: ${fallbackProjectId}, bucket: ${storageBucket}`);
 
     admin.initializeApp({
       credential: admin.credential.cert(formattedServiceAccount as admin.ServiceAccount),
