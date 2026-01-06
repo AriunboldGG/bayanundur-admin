@@ -276,6 +276,7 @@ export default function ProductsPage() {
       category: "",
       subcategory: "",
       modelNumber: "",
+      productTypes: [],
     })
     setSelectedMainCategory("")
     setAvailableSubcategories([])
