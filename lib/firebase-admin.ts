@@ -65,7 +65,8 @@ function initializeFirebase() {
       if (!process.env.FIREBASE_CLIENT_EMAIL) missingVars.push("FIREBASE_CLIENT_EMAIL");
       if (!process.env.FIREBASE_PRIVATE_KEY) missingVars.push("FIREBASE_PRIVATE_KEY");
       
-      if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || !!process.env.VERCEL;
+      if (isProduction) {
         console.error(`[Firebase Admin] Missing required environment variables in production: ${missingVars.join(", ")}`);
         console.error("[Firebase Admin] Please set these in your deployment platform (Vercel, etc.)");
         throw new Error(`Missing required environment variables: ${missingVars.join(", ")}. Please configure them in your production environment.`);
@@ -79,7 +80,8 @@ function initializeFirebase() {
     // Check if file exists
     if (!fs.existsSync(serviceAccountPath)) {
       // Don't throw during build - just log a warning
-      if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || !!process.env.VERCEL;
+      if (isProduction) {
         console.warn(`Service account file not found at: ${serviceAccountPath}. Using environment variables instead.`);
         return null;
       }
