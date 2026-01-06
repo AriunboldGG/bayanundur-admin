@@ -182,17 +182,29 @@ export default function ProductsPage() {
       setImageFiles([])
       
       // Set main category and load subcategories if mainCategory exists
+      // Handle both names (new format) and IDs (old format) for backward compatibility
       if (product.mainCategory) {
-        setSelectedMainCategory(product.mainCategory)
-        const mainCat = categories.find(cat => cat.id === product.mainCategory)
+        // Try to find by ID first, then by name
+        const mainCategoryId = getCategoryIdByName(product.mainCategory)
+        setSelectedMainCategory(mainCategoryId)
+        const mainCat = categories.find(cat => cat.id === mainCategoryId || cat.name === product.mainCategory)
         if (mainCat && mainCat.children) {
           setAvailableSubcategories(mainCat.children)
           
           // If category is set, check for sub-subcategories
           if (product.category) {
-            const subCat = mainCat.children.find(sub => sub.id === product.category)
+            const categoryId = getCategoryIdByName(product.category)
+            // Update formData with ID for proper selection
+            setFormData(prev => ({ ...prev, category: categoryId }))
+            const subCat = mainCat.children.find(sub => sub.id === categoryId || sub.name === product.category)
             if (subCat && subCat.children) {
               setAvailableSubSubcategories(subCat.children)
+              
+              // If subcategory is set, update formData with ID
+              if (product.subcategory) {
+                const subcategoryId = getCategoryIdByName(product.subcategory)
+                setFormData(prev => ({ ...prev, subcategory: subcategoryId }))
+              }
             } else {
               setAvailableSubSubcategories([])
             }
@@ -347,6 +359,74 @@ export default function ProductsPage() {
     setFormData({ ...formData, subcategory: subSubcategoryId })
   }
   
+  // Helper function to get category name by ID
+  const getCategoryNameById = (categoryId: string): string => {
+    if (!categoryId) return ""
+    
+    // If it's already a name (doesn't match ID pattern), return as is
+    // ID patterns: "1", "1-2", "1-2-3" (numbers with optional dashes)
+    const isIdPattern = /^\d+(-\d+)*$/.test(categoryId)
+    if (!isIdPattern) {
+      // Already a name, return as is
+      return categoryId
+    }
+    
+    // Check main categories (single digit like "1", "2", "3")
+    const mainCat = categories.find(cat => cat.id === categoryId)
+    if (mainCat) return mainCat.name
+    
+    // Check subcategories (format like "1-2", "2-1") and sub-subcategories (format like "1-2-3", "2-2-1")
+    for (const mainCat of categories) {
+      if (mainCat.children) {
+        for (const subCat of mainCat.children) {
+          // Check if this is the subcategory we're looking for
+          if (subCat.id === categoryId) {
+            return subCat.name
+          }
+          
+          // Check sub-subcategories
+          if (subCat.children) {
+            const subSubCat = subCat.children.find(subSub => subSub.id === categoryId)
+            if (subSubCat) return subSubCat.name
+          }
+        }
+      }
+    }
+    
+    // If not found, return the ID (shouldn't happen if IDs are correct)
+    console.warn(`Category ID "${categoryId}" not found in categories structure`)
+    return categoryId
+  }
+  
+  // Helper function to find category ID by name (for loading existing products)
+  const getCategoryIdByName = (categoryName: string): string => {
+    if (!categoryName) return ""
+    
+    // Check main categories
+    const mainCat = categories.find(cat => cat.name === categoryName)
+    if (mainCat) return mainCat.id
+    
+    // Check subcategories and sub-subcategories
+    for (const mainCat of categories) {
+      if (mainCat.children) {
+        for (const subCat of mainCat.children) {
+          // Check if this is the subcategory we're looking for
+          if (subCat.name === categoryName) {
+            return subCat.id
+          }
+          
+          // Check sub-subcategories
+          if (subCat.children) {
+            const subSubCat = subCat.children.find(subSub => subSub.name === categoryName)
+            if (subSubCat) return subSubCat.id
+          }
+        }
+      }
+    }
+    
+    return categoryName // Fallback to name if not found (might be an ID from old data)
+  }
+  
   // Check if fields should be shown based on main category selection or if editing
   const shouldShowFields = () => {
     // If editing, always show fields (main category is already set)
@@ -384,6 +464,22 @@ export default function ProductsPage() {
         ? formData.size.split(',').map(s => s.trim()).filter(s => s.length > 0)
         : []
       
+      // Get category names from IDs - always convert IDs to names
+      // The function will return the name if ID is found, or return the value as-is if it's already a name
+      const mainCategoryName = getCategoryNameById(selectedMainCategory)
+      const categoryName = getCategoryNameById(formData.category)
+      const subcategoryName = formData.subcategory ? getCategoryNameById(formData.subcategory) : ""
+      
+      // Debug logging to verify conversion
+      console.log("Category conversion:", {
+        selectedMainCategory,
+        mainCategoryName,
+        categoryId: formData.category,
+        categoryName,
+        subcategoryId: formData.subcategory,
+        subcategoryName
+      })
+      
       // Create FormData with product data and images
       const formDataToSend = new FormData()
       
@@ -398,9 +494,9 @@ export default function ProductsPage() {
       formDataToSend.append('material', formData.material)
       formDataToSend.append('description', formData.description)
       formDataToSend.append('feature', formData.feature)
-      formDataToSend.append('mainCategory', selectedMainCategory)
-      formDataToSend.append('category', formData.category)
-      formDataToSend.append('subcategory', formData.subcategory || '')
+      formDataToSend.append('mainCategory', mainCategoryName) // Send name instead of ID
+      formDataToSend.append('category', categoryName) // Send name instead of ID
+      formDataToSend.append('subcategory', subcategoryName) // Send name instead of ID
       formDataToSend.append('modelNumber', formData.modelNumber)
       
       // Append new image files
@@ -646,6 +742,7 @@ export default function ProductsPage() {
                 <TableRow>
                   <TableHead>Нэр</TableHead>
                   <TableHead>Брэнд</TableHead>
+                  <TableHead>Үндсэн ангилал</TableHead>
                   <TableHead>Ангилал</TableHead>
                   <TableHead>Дэд ангилал</TableHead>
                   <TableHead>Модел дугаар</TableHead>
@@ -659,7 +756,7 @@ export default function ProductsPage() {
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground">
                       {products.length === 0 
                         ? "No products found. Add your first product to get started."
                         : "No products match the selected filters."}
@@ -670,12 +767,31 @@ export default function ProductsPage() {
                     const sizeDisplay = Array.isArray(product.size) 
                       ? product.size.join(", ") 
                       : product.size || ""
+                    // Convert category IDs to names for display (handle both old IDs and new names)
+                    // Check if it looks like an ID
+                    // Main category: single digit like "1", "2", "3"
+                    // Category: format like "1-2", "2-1"
+                    // Subcategory: format like "1-2-3", "2-2-1"
+                    const isMainCategoryId = product.mainCategory && /^\d+$/.test(product.mainCategory) && product.mainCategory.length <= 2
+                    const isCategoryId = product.category && /^\d+-\d+$/.test(product.category)
+                    const isSubcategoryId = product.subcategory && /^\d+-\d+-\d+$/.test(product.subcategory)
+                    
+                    const mainCategoryDisplay = product.mainCategory 
+                      ? (isMainCategoryId ? getCategoryNameById(product.mainCategory) : product.mainCategory)
+                      : ""
+                    const categoryDisplay = product.category 
+                      ? (isCategoryId ? getCategoryNameById(product.category) : product.category)
+                      : ""
+                    const subcategoryDisplay = product.subcategory 
+                      ? (isSubcategoryId ? getCategoryNameById(product.subcategory) : product.subcategory)
+                      : ""
                     return (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell>{product.brand}</TableCell>
-                        <TableCell>{product.category}</TableCell>
-                        <TableCell>{product.subcategory}</TableCell>
+                        <TableCell>{mainCategoryDisplay}</TableCell>
+                        <TableCell>{categoryDisplay}</TableCell>
+                        <TableCell>{subcategoryDisplay}</TableCell>
                         <TableCell>{product["model number"] || "-"}</TableCell>
                         <TableCell>{product.color}</TableCell>
                         <TableCell>{sizeDisplay}</TableCell>
