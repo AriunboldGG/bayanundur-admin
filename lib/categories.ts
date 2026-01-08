@@ -329,6 +329,19 @@ export const categories: Category[] = [
       },
     ],
   },
+  {
+    id: "4",
+    name: "Бусад (Other)",
+    nameEn: "Other",
+    icon: "package",
+    children: [
+      {
+        id: "4-1",
+        name: "Бусад бүтээгдэхүүн",
+        nameEn: "Other products",
+      },
+    ],
+  },
 ]
 
 // Helper function to get full category path
