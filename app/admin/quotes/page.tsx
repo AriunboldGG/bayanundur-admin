@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Eye, CheckCircle, XCircle, Download, FileDown, FileText } from "lucide-react"
+import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2 } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
 import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType } from "docx"
 import { saveAs } from "file-saver"
@@ -67,6 +67,8 @@ export default function QuotesPage() {
   const [selectedForSendOffer, setSelectedForSendOffer] = useState<Set<string>>(new Set())
   const [selectedForInvoice, setSelectedForInvoice] = useState<Set<string>>(new Set())
   const [selectedForSpent, setSelectedForSpent] = useState<Set<string>>(new Set())
+  const [selectedQuotes, setSelectedQuotes] = useState<Set<string>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Fetch quotes from Firebase
   useEffect(() => {
@@ -112,6 +114,7 @@ export default function QuotesPage() {
 
     const timer = setTimeout(() => {
       fetchQuotes()
+      setSelectedQuotes(new Set()) // Clear selections when filters change
     }, 500) // Debounce for 500ms
 
     return () => clearTimeout(timer)
@@ -175,11 +178,13 @@ export default function QuotesPage() {
     quoteId: string,
     productId: string,
     newStatus: "sent_offer" | "create_invoice" | "spent"
-  ) => {
+  ): Promise<void> => {
     try {
       // Find the quote and update the product status
       const quote = quotes.find(q => q.id === quoteId)
-      if (!quote) return
+      if (!quote) {
+        throw new Error("Quote not found")
+      }
 
       const updatedProducts = quote.selectedProducts.map((product) =>
         product.productId === productId
@@ -214,11 +219,12 @@ export default function QuotesPage() {
           setSelectedQuote(result.data)
         }
       } else {
-        alert(result.error || "Failed to update product status")
+        throw new Error(result.error || "Failed to update product status")
       }
     } catch (err: any) {
       console.error("Error updating product status:", err)
       alert("Failed to update product status. Please try again.")
+      throw err // Re-throw to allow Promise.all to handle errors
     }
   }
 
@@ -618,6 +624,58 @@ export default function QuotesPage() {
 
   const filteredQuotes = getFilteredQuotes()
 
+  // Select all functionality
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedQuotes(new Set(filteredQuotes.map(q => q.id)))
+    } else {
+      setSelectedQuotes(new Set())
+    }
+  }
+
+  const handleSelectQuote = (quoteId: string, checked: boolean) => {
+    const newSet = new Set(selectedQuotes)
+    if (checked) {
+      newSet.add(quoteId)
+    } else {
+      newSet.delete(quoteId)
+    }
+    setSelectedQuotes(newSet)
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedQuotes.size === 0) return
+
+    if (!confirm(`Та ${selectedQuotes.size} үнийн саналыг устгахдаа итгэлтэй байна уу?`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const deletePromises = Array.from(selectedQuotes).map(id =>
+        fetch(`/api/quotes/${id}`, { method: "DELETE" })
+      )
+      
+      const results = await Promise.allSettled(deletePromises)
+      const failed = results.filter(r => r.status === "rejected" || !r.value.ok)
+      
+      if (failed.length > 0) {
+        alert(`Зарим үнийн саналыг устгахад алдаа гарлаа. ${failed.length} алдаатай.`)
+      } else {
+        setSelectedQuotes(new Set())
+        await fetchQuotes()
+      }
+    } catch (error) {
+      console.error("Error deleting quotes:", error)
+      alert("Үнийн саналыг устгахад алдаа гарлаа.")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const isAllSelected = filteredQuotes.length > 0 && selectedQuotes.size === filteredQuotes.length
+  const isIndeterminate = selectedQuotes.size > 0 && selectedQuotes.size < filteredQuotes.length
+
   const handleDownloadExcel = async () => {
     // Dynamically import xlsx to avoid SSR issues
     const XLSX = await import("xlsx")
@@ -767,23 +825,23 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Үнийн санал</h1>
-          <p className="text-muted-foreground">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">Үнийн санал</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             Харилцагчаас ирсэн үнийн санал удирдах цэс
           </p>
           {filteredQuotes.length !== quotes.length && (
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Нийт: <span className="font-semibold text-foreground">{quotes.length}</span> үнийн санал
               (Харуулж байна: <span className="font-semibold text-foreground">{filteredQuotes.length}</span>)
             </p>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="startDate" className="text-sm font-medium">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <Label htmlFor="startDate" className="text-xs sm:text-sm font-medium whitespace-nowrap">
               Эхлэх огноо:
             </Label>
             <Input
@@ -791,11 +849,11 @@ export default function QuotesPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-[180px]"
+              className="w-full sm:w-[160px] lg:w-[180px]"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="endDate" className="text-sm font-medium">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <Label htmlFor="endDate" className="text-xs sm:text-sm font-medium whitespace-nowrap">
               Дуусах огноо:
             </Label>
             <Input
@@ -803,7 +861,7 @@ export default function QuotesPage() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-[180px]"
+              className="w-full sm:w-[160px] lg:w-[180px]"
               min={startDate || undefined}
             />
           </div>
@@ -814,6 +872,7 @@ export default function QuotesPage() {
                 setStartDate("")
                 setEndDate("")
               }}
+              className="w-full sm:w-auto"
             >
               Цэвэрлэх
             </Button>
@@ -823,42 +882,68 @@ export default function QuotesPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle>Үнийн саналууд</CardTitle>
-             
+              <CardTitle className="text-lg sm:text-xl">Үнийн саналууд</CardTitle>
             </div>
-            <Button onClick={handleDownloadExcel}>
-              <Download className="mr-2 h-4 w-4" />
-              Excel татах
-            </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              {selectedQuotes.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteSelected}
+                  disabled={isDeleting}
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Устгах ({selectedQuotes.size})
+                </Button>
+              )}
+              <Button onClick={handleDownloadExcel} className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Excel татах</span>
+                <span className="sm:hidden">Excel</span>
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+              <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Огноо</TableHead>
-                <TableHead>Харилцагч</TableHead>
-                <TableHead>Албан тушаал</TableHead>
-                <TableHead>Компани</TableHead>
-                <TableHead>И-мэйл</TableHead>
-                <TableHead>Утас</TableHead>
-                <TableHead>Барааны тоо</TableHead>
-                <TableHead>Төлөв</TableHead>
-                <TableHead className="text-right">Үйлдлүүд</TableHead>
+                <TableHead className="w-12">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = isIndeterminate
+                    }}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                </TableHead>
+                <TableHead className="min-w-[120px]">Огноо</TableHead>
+                <TableHead className="min-w-[150px]">Харилцагч</TableHead>
+                <TableHead className="hidden md:table-cell min-w-[120px]">Албан тушаал</TableHead>
+                <TableHead className="hidden lg:table-cell min-w-[150px]">Компани</TableHead>
+                <TableHead className="hidden lg:table-cell min-w-[180px]">И-мэйл</TableHead>
+                <TableHead className="hidden md:table-cell min-w-[120px]">Утас</TableHead>
+                <TableHead className="min-w-[100px]">Барааны тоо</TableHead>
+                <TableHead className="min-w-[100px]">Төлөв</TableHead>
+                <TableHead className="text-right min-w-[100px]">Үйлдлүүд</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     Уншиж байна...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={10} className="text-center py-8 text-destructive">
                     {error}
                     <Button
                       variant="outline"
@@ -871,7 +956,7 @@ export default function QuotesPage() {
                 </TableRow>
               ) : filteredQuotes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground">
                     {quotes.length === 0 
                       ? "No quote requests found."
                       : `No quotes found for selected date range${startDate || endDate ? ` (${startDate || "..."} - ${endDate || "..."})` : ""}.`}
@@ -883,21 +968,29 @@ export default function QuotesPage() {
                   const items = quote.selectedProducts || []
                   return (
                     <TableRow key={quote.id}>
-                      <TableCell>{formatDate(quote.createdAt)}</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedQuotes.has(quote.id)}
+                          onChange={(e) => handleSelectQuote(quote.id, e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                      </TableCell>
+                      <TableCell className="min-w-[120px]">{formatDate(quote.createdAt)}</TableCell>
+                      <TableCell className="font-medium min-w-[150px]">
                         {quote.firstName} {quote.lastName}
                       </TableCell>
-                      <TableCell>{quote.position || "-"}</TableCell>
-                      <TableCell>{quote.company}</TableCell>
-                      <TableCell>{quote.email}</TableCell>
-                      <TableCell>{quote.phone}</TableCell>
-                      <TableCell>{items.length}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell min-w-[120px]">{quote.position || "-"}</TableCell>
+                      <TableCell className="hidden lg:table-cell min-w-[150px]">{quote.company}</TableCell>
+                      <TableCell className="hidden lg:table-cell min-w-[180px]">{quote.email}</TableCell>
+                      <TableCell className="hidden md:table-cell min-w-[120px]">{quote.phone}</TableCell>
+                      <TableCell className="min-w-[100px]">{items.length}</TableCell>
+                      <TableCell className="min-w-[100px]">
                         <Badge className={getDisplayStatus(quote).color}>
                           {getDisplayStatus(quote).label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right min-w-[100px]">
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="ghost"
@@ -923,11 +1016,13 @@ export default function QuotesPage() {
               )}
             </TableBody>
           </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           {selectedQuote && (
             <>
               <DialogHeader>
@@ -938,8 +1033,8 @@ export default function QuotesPage() {
               <div className="space-y-6 py-4">
                 {/* Customer Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Харилцагчийн мэдээлэл</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3">Харилцагчийн мэдээлэл</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">
                         Нэр
@@ -1117,7 +1212,7 @@ export default function QuotesPage() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2 justify-end pt-2">
+                <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2">
                   <Button
                     variant="default"
                     onClick={() => {
@@ -1126,6 +1221,7 @@ export default function QuotesPage() {
                       }
                     }}
                     disabled={selectedForSendOffer.size === 0}
+                    className="w-full sm:w-auto"
                   >
                     Sent offer
                   </Button>
@@ -1137,6 +1233,7 @@ export default function QuotesPage() {
                       }
                     }}
                     disabled={selectedForInvoice.size === 0}
+                    className="w-full sm:w-auto"
                   >
                     Create invoice
                   </Button>
@@ -1148,13 +1245,14 @@ export default function QuotesPage() {
                       }
                     }}
                     disabled={selectedForSpent.size === 0}
+                    className="w-full sm:w-auto"
                   >
                     Spent
                   </Button>
                 </div>
 
                 {/* Status and Dates */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
                       Төлөв
@@ -1198,7 +1296,7 @@ export default function QuotesPage() {
 
       {/* Send Offer Form Dialog */}
       <Dialog open={isSendOfferDialogOpen} onOpenChange={setIsSendOfferDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Sent Offer Form</DialogTitle>
             <DialogDescription>
@@ -1211,8 +1309,8 @@ export default function QuotesPage() {
               <>
                 {/* Quote Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Quote Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3">Quote Information</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Quote Number</Label>
                       <Input
@@ -1311,20 +1409,27 @@ export default function QuotesPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                // Handle send offer action
+              onClick={async () => {
+                // Handle save action - update status to sent_offer
                 if (selectedQuote) {
-                  // Update only selected products to "sent_offer" status
-                  selectedQuote.selectedProducts
-                    .filter(product => selectedForSendOffer.has(product.productId))
-                    .forEach((product) => {
-                      handleProductStatusChange(selectedQuote.id, product.productId, "sent_offer")
-                    })
+                  try {
+                    // Update only selected products to "sent_offer" status
+                    const updatePromises = selectedQuote.selectedProducts
+                      .filter(product => selectedForSendOffer.has(product.productId))
+                      .map((product) => {
+                        return handleProductStatusChange(selectedQuote.id, product.productId, "sent_offer")
+                      })
+                    
+                    await Promise.all(updatePromises)
+                    setIsSendOfferDialogOpen(false)
+                    await fetchQuotes() // Refresh quotes list
+                  } catch (error) {
+                    console.error("Error saving offer:", error)
+                  }
                 }
-                setIsSendOfferDialogOpen(false)
               }}
             >
-              Send Offer
+              Хадгалах (Save)
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1332,7 +1437,7 @@ export default function QuotesPage() {
 
       {/* Create Invoice Form Dialog */}
       <Dialog open={isCreateInvoiceDialogOpen} onOpenChange={setIsCreateInvoiceDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>НЭХЭМЖЛЭЛ (Invoice)</DialogTitle>
             <DialogDescription>
@@ -1365,8 +1470,8 @@ export default function QuotesPage() {
 
                 {/* Sender Information (Нэхэмжлэгч) */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 border-b pb-1">Нэхэмжлэгч (Sender/Seller)</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 border-b pb-1">Нэхэмжлэгч (Sender/Seller)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Байгууллагын нэр (Company Name)</Label>
                       <Input value="БАЯН ӨНДӨР ХХК" disabled />
@@ -1403,8 +1508,8 @@ export default function QuotesPage() {
 
                 {/* Receiver Information (Төлөгч) */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 border-b pb-1">Төлөгч (Payer/Buyer)</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 border-b pb-1">Төлөгч (Payer/Buyer)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Худалдан авагчийн нэр (Buyer Name)</Label>
                       <Input
@@ -1567,7 +1672,7 @@ export default function QuotesPage() {
                 </div>
 
                 {/* Signature Fields */}
-                <div className="grid grid-cols-3 gap-4 border-t pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
                   <div>
                     <Label>Тэмдэг (Stamp)</Label>
                     <div className="mt-2 h-20 border rounded-md"></div>
@@ -1601,20 +1706,27 @@ export default function QuotesPage() {
               Цуцлах (Cancel)
             </Button>
             <Button
-              onClick={() => {
-                // Handle create invoice action
+              onClick={async () => {
+                // Handle save action - update status to create_invoice
                 if (selectedQuote) {
-                  // Update only selected products to "create_invoice" status
-                  selectedQuote.selectedProducts
-                    .filter(product => selectedForInvoice.has(product.productId))
-                    .forEach((product) => {
-                      handleProductStatusChange(selectedQuote.id, product.productId, "create_invoice")
-                    })
+                  try {
+                    // Update only selected products to "create_invoice" status
+                    const updatePromises = selectedQuote.selectedProducts
+                      .filter(product => selectedForInvoice.has(product.productId))
+                      .map((product) => {
+                        return handleProductStatusChange(selectedQuote.id, product.productId, "create_invoice")
+                      })
+                    
+                    await Promise.all(updatePromises)
+                    setIsCreateInvoiceDialogOpen(false)
+                    await fetchQuotes() // Refresh quotes list
+                  } catch (error) {
+                    console.error("Error saving invoice:", error)
+                  }
                 }
-                setIsCreateInvoiceDialogOpen(false)
               }}
             >
-              Нэхэмжлэл үүсгэх (Create Invoice)
+              Хадгалах (Save)
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1622,7 +1734,7 @@ export default function QuotesPage() {
 
       {/* Spent Form Dialog - Expense Receipt */}
       <Dialog open={isSpentDialogOpen} onOpenChange={setIsSpentDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>ЗАРЛАГЫН БАРИМТ (Expense Receipt)</DialogTitle>
             <DialogDescription>
@@ -1654,7 +1766,7 @@ export default function QuotesPage() {
                 </div>
 
                 {/* Sender and Receiver Information Side by Side */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Sender Information (Left) */}
                   <div>
                     <h3 className="text-lg font-semibold mb-3 border-b pb-1">
@@ -1821,7 +1933,7 @@ export default function QuotesPage() {
                 })()}
 
                 {/* Signature Fields */}
-                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
                   <div>
                     <Label>Тэмдэг (Stamp)</Label>
                     <div className="mt-2 h-20 border rounded-md"></div>
@@ -1863,20 +1975,27 @@ export default function QuotesPage() {
               Цуцлах (Cancel)
             </Button>
             <Button
-              onClick={() => {
-                // Handle mark as spent action
+              onClick={async () => {
+                // Handle save action - update status to spent
                 if (selectedQuote) {
-                  // Update only selected products to "spent" status
-                  selectedQuote.selectedProducts
-                    .filter(product => selectedForSpent.has(product.productId))
-                    .forEach((product) => {
-                      handleProductStatusChange(selectedQuote.id, product.productId, "spent")
-                    })
+                  try {
+                    // Update only selected products to "spent" status
+                    const updatePromises = selectedQuote.selectedProducts
+                      .filter(product => selectedForSpent.has(product.productId))
+                      .map((product) => {
+                        return handleProductStatusChange(selectedQuote.id, product.productId, "spent")
+                      })
+                    
+                    await Promise.all(updatePromises)
+                    setIsSpentDialogOpen(false)
+                    await fetchQuotes() // Refresh quotes list
+                  } catch (error) {
+                    console.error("Error saving spent:", error)
+                  }
                 }
-                setIsSpentDialogOpen(false)
               }}
             >
-              Зарлага баримтлах (Mark as Spent)
+              Хадгалах (Save)
             </Button>
           </DialogFooter>
         </DialogContent>

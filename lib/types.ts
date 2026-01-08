@@ -19,3 +19,17 @@ export interface PriceQuote {
   updatedAt?: string
 }
 
+export interface SpecialOrder {
+  id: string
+  name: string
+  email: string
+  phone: string
+  organizationName?: string
+  productName: string
+  productDescription: string
+  quantity: string
+  technicalRequirements?: string
+  additionalInfo?: string
+  createdAt: string
+  updatedAt?: string
+}
