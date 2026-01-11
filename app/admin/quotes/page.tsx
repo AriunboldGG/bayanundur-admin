@@ -44,9 +44,9 @@ const statusColors = {
 }
 
 const statusLabels = {
-  sent_offer: "Sent offer",
-  create_invoice: "Create invoice",
-  spent: "Spent",
+  sent_offer: "Үнийн санал",
+  create_invoice: "Нэхэмжлэл",
+  spent: "Зарлагын баримт",
   pending: "Хүлээгдэж буй",
 }
 
@@ -89,7 +89,17 @@ export default function QuotesPage() {
       const response = await fetch(url)
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to get error message from response
+        let errorMsg = `HTTP error! status: ${response.status}`
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            errorMsg = errorData.error
+          }
+        } catch {
+          // If response is not JSON, use default message
+        }
+        throw new Error(errorMsg)
       }
       
       const result = await response.json()
@@ -97,11 +107,45 @@ export default function QuotesPage() {
       if (result.success) {
         setQuotes(result.data || [])
       } else {
+        // Use the error message from the API as-is (it already includes helpful instructions)
         setError(result.error || "Failed to fetch quotes")
       }
     } catch (err: any) {
       console.error("Error fetching quotes:", err)
-      setError(err?.message || "Failed to load quotes. Please try again.")
+      let errorMsg = err?.message || "Failed to load quotes. Please try again."
+      
+      // Check if it's a Firebase configuration error first (most specific)
+      if (err?.message?.includes("not initialized") || err?.message?.includes("Missing required") || err?.message?.includes("Firebase Admin") || err?.message?.includes("Firebase configuration")) {
+        // Only add the message if it's not already included
+        if (!err.message.includes(".env.local") && !err.message.includes("environment variables")) {
+          const isProduction = process.env.NODE_ENV === "production";
+          if (isProduction) {
+            errorMsg = `${err.message} Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in your deployment platform.`
+          } else {
+            errorMsg = `${err.message} Please add these to your .env.local file.`
+          }
+        } else {
+          errorMsg = err.message
+        }
+      }
+      // Check if it's a network connection error (fetch failed completely, not HTTP error status)
+      // Network errors: TypeError (Failed to fetch), NetworkError, or fetch timeout
+      // NOT HTTP error status codes (those are server errors, handled above)
+      else if (err?.name === "TypeError" && err?.message?.includes("fetch")) {
+        // This is a real network error - fetch couldn't reach the server
+        errorMsg = "Unable to connect to the server. Please check your network connection and try again."
+      }
+      else if (err?.name === "NetworkError" || err?.message?.includes("NetworkError")) {
+        errorMsg = "Unable to connect to the server. Please check your network connection and try again."
+      }
+      // HTTP error status codes (like 500) are server errors, not network errors
+      // These should show the actual error message from the API
+      else if (err?.message?.includes("HTTP error")) {
+        // Keep the original error message which includes the API error details
+        errorMsg = err.message
+      }
+      
+      setError(errorMsg)
     } finally {
       setIsLoading(false)
     }
@@ -303,7 +347,7 @@ export default function QuotesPage() {
     }
   }
 
-  // Generate Word document for Send Offer
+  // Generate Татаж авах document for Send Offer
   const handleDownloadSendOfferWord = async () => {
     if (!selectedQuote) return
 
@@ -383,7 +427,7 @@ export default function QuotesPage() {
     saveAs(blob, `Send_Offer_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
   }
 
-  // Generate Word document for Invoice
+  // Generate Татаж авах document for Invoice
   const handleDownloadInvoiceWord = async () => {
     if (!selectedQuote) return
 
@@ -422,7 +466,7 @@ export default function QuotesPage() {
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
-            text: "Бараа, үйлчилгээ (Products/Services)",
+            text: "Бараа, үйлчилгээ",
             heading: "Heading2",
           }),
           new DocxTable({
@@ -453,25 +497,7 @@ export default function QuotesPage() {
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
           }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "ДҮН (Subtotal): ", bold: true }),
-              new TextRun({ text: subtotal.toFixed(2) }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "НӨАТ (VAT): ", bold: true }),
-              new TextRun({ text: vat.toFixed(2) }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "НИЙТ ДҮН (Grand Total): ", bold: true }),
-              new TextRun({ text: grandTotal.toFixed(2) }),
-            ],
-          }),
+
         ],
       }],
     })
@@ -480,7 +506,7 @@ export default function QuotesPage() {
     saveAs(blob, `Invoice_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
   }
 
-  // Generate Word document for Spent/Expense Receipt
+  // Generate Татаж авах document for Зарлагын баримт/Expense Receipt
   const handleDownloadSpentWord = async () => {
     if (!selectedQuote) return
 
@@ -1022,7 +1048,7 @@ export default function QuotesPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[90vh] overflow-y-auto">
           {selectedQuote && (
             <>
               <DialogHeader>
@@ -1099,12 +1125,21 @@ export default function QuotesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead>ID</TableHead>
                           <TableHead>Барааны нэр</TableHead>
+                          <TableHead>Зураг</TableHead>
+                          <TableHead>Брэнд</TableHead>
+                          <TableHead>Өнгө</TableHead>
+                          <TableHead>Хэмжээ</TableHead>
+                          <TableHead>Модель дугаар</TableHead>
+                          <TableHead className="text-right">Үнэ</TableHead>
+                          <TableHead className="text-right">Үнэ (тоо)</TableHead>
                           <TableHead className="text-right">Тоо ширхэг</TableHead>
                           <TableHead className="text-center">Төлөв</TableHead>
-                          <TableHead className="text-center">Sent offer</TableHead>
-                          <TableHead className="text-center">Create invoice</TableHead>
-                          <TableHead className="text-center">Spent</TableHead>
+                          <TableHead className="text-center">Барааны нөөц</TableHead>
+                          <TableHead className="text-center">Үнийн санал</TableHead>
+                          <TableHead className="text-center">Нэхэмжлэл</TableHead>
+                          <TableHead className="text-center">Зарлагын баримт</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1115,7 +1150,7 @@ export default function QuotesPage() {
                           if (items.length === 0) {
                             return (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
+                                <TableCell colSpan={15} className="text-center text-muted-foreground py-4">
                                   Бараа олдсонгүй (No products found)
                                 </TableCell>
                               </TableRow>
@@ -1124,10 +1159,12 @@ export default function QuotesPage() {
                           
                           return items.map((product: any, index: number) => {
                             // Type the status properly to avoid 'any' indexing errors
+                            // Use status_type from backend, fallback to status
                             type ProductStatus = "sent_offer" | "create_invoice" | "spent" | "pending"
+                            const statusValue = product.status_type || product.status || "pending"
                             const productStatus: ProductStatus = 
-                              (product.status && ["sent_offer", "create_invoice", "spent", "pending"].includes(product.status))
-                                ? product.status as ProductStatus
+                              (statusValue && ["sent_offer", "create_invoice", "spent", "pending"].includes(statusValue))
+                                ? statusValue as ProductStatus
                                 : "pending"
                             // Handle different field names from Firestore
                             const productName = product.productName || product.name || product.product || "Unknown Product"
@@ -1143,8 +1180,32 @@ export default function QuotesPage() {
                             
                             return (
                               <TableRow key={index}>
+                                <TableCell>
+                                  {product.id !== undefined ? product.id : productId}
+                                </TableCell>
                                 <TableCell className="font-medium">
                                   {productName}
+                                </TableCell>
+                                <TableCell>
+                                  {product.img ? (
+                                    <img 
+                                      src={product.img} 
+                                      alt={productName}
+                                      className="w-12 h-12 object-cover rounded"
+                                    />
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>{product.brand || "-"}</TableCell>
+                                <TableCell>{product.color || "-"}</TableCell>
+                                <TableCell>{product.size || "-"}</TableCell>
+                                <TableCell>{product.modelNumber || "-"}</TableCell>
+                                <TableCell className="text-right">
+                                  {product.price ? product.price.toLocaleString("mn-MN") : "-"}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {product.priceNum !== undefined ? product.priceNum : "-"}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   {quantity}
@@ -1152,6 +1213,11 @@ export default function QuotesPage() {
                               <TableCell className="text-center">
                                 <Badge className={statusColors[productStatus]}>
                                   {statusLabels[productStatus]}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={statusColors[productStatus]}>
+                                  {statusValue}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-center">
@@ -1223,7 +1289,7 @@ export default function QuotesPage() {
                     disabled={selectedForSendOffer.size === 0}
                     className="w-full sm:w-auto"
                   >
-                    Sent offer
+                    Үнийн санал
                   </Button>
                   <Button
                     variant="default"
@@ -1235,7 +1301,7 @@ export default function QuotesPage() {
                     disabled={selectedForInvoice.size === 0}
                     className="w-full sm:w-auto"
                   >
-                    Create invoice
+                    Нэхэмжлэл
                   </Button>
                   <Button
                     variant="default"
@@ -1247,7 +1313,7 @@ export default function QuotesPage() {
                     disabled={selectedForSpent.size === 0}
                     className="w-full sm:w-auto"
                   >
-                    Spent
+                    Зарлагын баримт
                   </Button>
                 </div>
 
@@ -1384,15 +1450,7 @@ export default function QuotesPage() {
                   />
                 </div>
 
-                {/* Validity Period */}
-                <div>
-                  <Label>Quote Validity (Days)</Label>
-                  <Input
-                    type="number"
-                    defaultValue="30"
-                    className="w-32"
-                  />
-                </div>
+              
               </>
             )}
           </div>
@@ -1403,7 +1461,7 @@ export default function QuotesPage() {
               onClick={handleDownloadSendOfferWord}
             >
               <FileText className="mr-2 h-4 w-4" />
-              Download Word
+              Татаж авах
             </Button>
             <Button variant="outline" onClick={() => setIsSendOfferDialogOpen(false)}>
               Cancel
@@ -1429,7 +1487,7 @@ export default function QuotesPage() {
                 }
               }}
             >
-              Хадгалах (Save)
+              Хадгалах 
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1613,83 +1671,7 @@ export default function QuotesPage() {
                     </Table>
                   </div>
                 </div>
-
-                {/* Summary Section */}
-                {(() => {
-                  const subtotal = selectedQuote.selectedProducts
-                    .filter(product => selectedForInvoice.has(product.productId))
-                    .reduce((sum, product) => {
-                    const unitPrice = parseFloat(invoicePrices[product.productId] || "0")
-                    const quantity = product.quantity || 0
-                    return sum + (unitPrice * quantity)
-                  }, 0)
-                  const vat = subtotal * 0.1 // 10% VAT
-                  const grandTotal = subtotal + vat
-                  
-                  return (
-                    <div className="border rounded-md p-4 bg-gray-50">
-                      <div className="flex justify-end">
-                        <div className="w-80 space-y-2">
-                          <div className="flex justify-between">
-                            <Label className="font-semibold">ДҮН (Subtotal):</Label>
-                            <span className="font-semibold">
-                              {subtotal.toLocaleString("mn-MN", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <Label className="font-semibold">НӨАТ (VAT):</Label>
-                            <span className="font-semibold">
-                              {vat.toLocaleString("mn-MN", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between border-t pt-2">
-                            <Label className="text-lg font-bold">НИЙТ ДҮН (Grand Total):</Label>
-                            <span className="text-lg font-bold">
-                              {grandTotal.toLocaleString("mn-MN", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* Textual Grand Total */}
-                <div>
-                  <Label>Мөнгөн дүн (Үсгээр) - Amount in Words:</Label>
-                  <div className="mt-1 p-3 border rounded-md bg-gray-50">
-                    <p className="text-sm italic">Amount will be displayed here in words</p>
-                  </div>
-                </div>
-
-                {/* Signature Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
-                  <div>
-                    <Label>Тэмдэг (Stamp)</Label>
-                    <div className="mt-2 h-20 border rounded-md"></div>
-                  </div>
-                  <div>
-                    <Label>Захирал (Director)</Label>
-                    <div className="mt-2 h-20 border rounded-md flex items-end p-2">
-                      <span className="text-xs text-muted-foreground">Signature</span>
-                    </div>
-                  </div>
-                  <div>
-                    <Label>Нягтлан бодогч (Accountant)</Label>
-                    <div className="mt-2 h-20 border rounded-md flex items-end p-2">
-                      <span className="text-xs text-muted-foreground">Signature</span>
-                    </div>
-                  </div>
-                </div>
+             
               </>
             )}
           </div>
@@ -1700,10 +1682,10 @@ export default function QuotesPage() {
               onClick={handleDownloadInvoiceWord}
             >
               <FileText className="mr-2 h-4 w-4" />
-              Download Word
+              Татаж авах
             </Button>
             <Button variant="outline" onClick={() => setIsCreateInvoiceDialogOpen(false)}>
-              Цуцлах (Cancel)
+              Цуцлах 
             </Button>
             <Button
               onClick={async () => {
@@ -1726,13 +1708,13 @@ export default function QuotesPage() {
                 }
               }}
             >
-              Хадгалах (Save)
+              Хадгалах 
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Spent Form Dialog - Expense Receipt */}
+      {/* Зарлагын баримт Form Dialog - Expense Receipt */}
       <Dialog open={isSpentDialogOpen} onOpenChange={setIsSpentDialogOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1969,10 +1951,10 @@ export default function QuotesPage() {
               onClick={handleDownloadSpentWord}
             >
               <FileText className="mr-2 h-4 w-4" />
-              Download Word
+              Татаж авах
             </Button>
             <Button variant="outline" onClick={() => setIsSpentDialogOpen(false)}>
-              Цуцлах (Cancel)
+              Цуцлах 
             </Button>
             <Button
               onClick={async () => {
@@ -1995,7 +1977,7 @@ export default function QuotesPage() {
                 }
               }}
             >
-              Хадгалах (Save)
+              Хадгалах 
             </Button>
           </DialogFooter>
         </DialogContent>

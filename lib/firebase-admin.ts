@@ -1,6 +1,4 @@
 import admin from "firebase-admin";
-import * as fs from "fs";
-import * as path from "path";
 
 let db: admin.firestore.Firestore | null = null;
 let initializationAttempted = false;
@@ -18,110 +16,65 @@ function initializeFirebase() {
   }
 
   try {
-    // Try to use environment variables first (for Vercel/production)
+    // Use environment variables from .env.local (preferred method)
     // All sensitive data MUST come from environment variables
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = process.env.FIREBASE_PRIVATE_KEY;
     
-    if (projectId && clientEmail && privateKey) {
-      // Validate that all required environment variables are set
-      if (!projectId) {
-        throw new Error("FIREBASE_PROJECT_ID environment variable is not set");
-      }
-      
-      if (!clientEmail) {
-        throw new Error("FIREBASE_CLIENT_EMAIL environment variable is not set");
-      }
-      
-      if (!privateKey) {
-        throw new Error("FIREBASE_PRIVATE_KEY environment variable is not set");
-      }
-
-      // All sensitive data comes from environment variables - never hardcoded
-      const serviceAccount = {
-        projectId: projectId,
-        clientEmail: clientEmail,
-        privateKey: privateKey.replace(/\\n/g, "\n"), // Replace escaped newlines with actual newlines
-      };
-
-      // Use explicit bucket name from env, or construct from project ID
-      // Default to new Firebase Storage format: projectId.firebasestorage.app
-      const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
-
-      console.log(`[Firebase Admin] Initializing with project: ${projectId}, bucket: ${storageBucket}`);
-
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-        storageBucket: storageBucket,
-      });
-
-      console.log("[Firebase Admin] Initialized successfully from environment variables");
-      return admin.app();
-    } else {
-      // Log which environment variables are missing
-      const missingVars = [];
-      if (!process.env.FIREBASE_PROJECT_ID) missingVars.push("FIREBASE_PROJECT_ID");
-      if (!process.env.FIREBASE_CLIENT_EMAIL) missingVars.push("FIREBASE_CLIENT_EMAIL");
-      if (!process.env.FIREBASE_PRIVATE_KEY) missingVars.push("FIREBASE_PRIVATE_KEY");
-      
+    // Check if all required environment variables are set
+    const missingVars = [];
+    if (!projectId) missingVars.push("FIREBASE_PROJECT_ID");
+    if (!clientEmail) missingVars.push("FIREBASE_CLIENT_EMAIL");
+    if (!privateKey) missingVars.push("FIREBASE_PRIVATE_KEY");
+    
+    if (missingVars.length > 0) {
       const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || !!process.env.VERCEL;
+      
       if (isProduction) {
         console.error(`[Firebase Admin] Missing required environment variables in production: ${missingVars.join(", ")}`);
         console.error("[Firebase Admin] Please set these in your deployment platform (Vercel, etc.)");
         throw new Error(`Missing required environment variables: ${missingVars.join(", ")}. Please configure them in your production environment.`);
       }
+      
+      // In development, provide clear error message about .env.local
+      const clientProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      let errorMessage = `Firebase Admin SDK initialization failed. Missing required environment variables in .env.local: ${missingVars.join(", ")}\n\n`;
+      errorMessage += `To fix this, add these to your .env.local file:\n`;
+      errorMessage += `FIREBASE_PROJECT_ID=${clientProjectId || "your-project-id"}\n`;
+      errorMessage += `FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com\n`;
+      errorMessage += `FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour private key here\\n-----END PRIVATE KEY-----\\n"\n\n`;
+      errorMessage += `To get these values:\n`;
+      errorMessage += `1. Go to Firebase Console > Project Settings > Service Accounts\n`;
+      errorMessage += `2. Click "Generate New Private Key" to download the JSON file\n`;
+      errorMessage += `3. Copy the values from the JSON:\n`;
+      errorMessage += `   - project_id → FIREBASE_PROJECT_ID\n`;
+      errorMessage += `   - client_email → FIREBASE_CLIENT_EMAIL\n`;
+      errorMessage += `   - private_key → FIREBASE_PRIVATE_KEY (keep the quotes and \\n characters)`;
+      
+      throw new Error(errorMessage);
     }
 
-    // Fallback to permissions.json file (for local development)
-    // But still prioritize environment variables for project ID and storage bucket
-    const serviceAccountPath = path.join(process.cwd(), "permissions.json");
-    
-    // Check if file exists
-    if (!fs.existsSync(serviceAccountPath)) {
-      // Don't throw during build - just log a warning
-      const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || !!process.env.VERCEL;
-      if (isProduction) {
-        console.warn(`Service account file not found at: ${serviceAccountPath}. Using environment variables instead.`);
-        return null;
-      }
-      throw new Error(`Service account file not found at: ${serviceAccountPath}`);
-    }
-    
-    const serviceAccountFile = fs.readFileSync(serviceAccountPath, "utf8");
-    const serviceAccount = JSON.parse(serviceAccountFile);
-    
-    // Validate required fields
-    if (!serviceAccount.private_key || !serviceAccount.client_email || !serviceAccount.project_id) {
-      throw new Error("Service account file is missing required fields (private_key, client_email, or project_id)");
-    }
-
-    // Ensure private key has proper newlines
-    const formattedServiceAccount = {
-      ...serviceAccount,
-      private_key: (serviceAccount.private_key || "").replace(/\\n/g, "\n"),
+    // All required environment variables are present - initialize Firebase Admin
+    const serviceAccount = {
+      projectId: projectId!,
+      clientEmail: clientEmail!,
+      privateKey: privateKey!.replace(/\\n/g, "\n"), // Replace escaped newlines with actual newlines
     };
-
-    // Prioritize environment variable for project ID (for Vercel/production)
-    // Fallback to project_id from service account file
-    const fallbackProjectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id;
-    
-    if (!fallbackProjectId) {
-      throw new Error("project_id is missing. Please set FIREBASE_PROJECT_ID environment variable or ensure project_id is in service account file");
-    }
 
     // Use explicit bucket name from env, or construct from project ID
     // Default to new Firebase Storage format: projectId.firebasestorage.app
-    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${fallbackProjectId}.firebasestorage.app`;
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
 
-    console.log(`Initializing Firebase Admin with project: ${fallbackProjectId}, bucket: ${storageBucket}`);
+    console.log(`[Firebase Admin] Initializing with project: ${projectId}, bucket: ${storageBucket}`);
+    console.log(`[Firebase Admin] Using credentials from .env.local`);
 
     admin.initializeApp({
-      credential: admin.credential.cert(formattedServiceAccount as admin.ServiceAccount),
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
       storageBucket: storageBucket,
     });
 
-    console.log("Firebase Admin initialized successfully from permissions.json");
+    console.log("[Firebase Admin] Initialized successfully from environment variables");
     return admin.app();
   } catch (error: any) {
     console.error("Error initializing Firebase Admin:", error);
@@ -210,20 +163,6 @@ export function getStorageBucket() {
       }
     }
     
-    // 4. Try reading from permissions.json as last resort
-    if (!projectId) {
-      try {
-        const serviceAccountPath = path.join(process.cwd(), "permissions.json");
-        if (fs.existsSync(serviceAccountPath)) {
-          const serviceAccountFile = fs.readFileSync(serviceAccountPath, "utf8");
-          const serviceAccount = JSON.parse(serviceAccountFile);
-          projectId = serviceAccount.project_id;
-        }
-      } catch (e) {
-        // Ignore errors
-      }
-    }
-    
     if (!projectId) {
       console.error("Debug info:", {
         envProjectId: process.env.FIREBASE_PROJECT_ID,
@@ -233,8 +172,7 @@ export function getStorageBucket() {
       });
       throw new Error(
         "Cannot determine storage bucket: projectId is undefined. " +
-        "Please set FIREBASE_PROJECT_ID environment variable or ensure project_id is in permissions.json. " +
-        "Your project ID should be: bayanundur-backend"
+        "Please set FIREBASE_PROJECT_ID in your .env.local file."
       );
     }
     

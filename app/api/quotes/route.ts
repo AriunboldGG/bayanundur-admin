@@ -8,13 +8,8 @@ export async function GET(request: NextRequest) {
   try {
     console.log("[Quotes API] Fetching quotes from Firestore...");
     
-    // Check if db is initialized
-    if (!db) {
-      const errorMsg = "Firestore database is not initialized. Check Firebase Admin configuration. " +
-        "In production, ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set.";
-      console.error("[Quotes API]", errorMsg);
-      throw new Error(errorMsg);
-    }
+    // Note: db is a proxy that initializes on first access
+    // If Firebase Admin is not configured, it will throw an error when we try to use db
     
     const { searchParams } = new URL(request.url);
     const startDateParam = searchParams.get("startDate");
@@ -94,7 +89,18 @@ export async function GET(request: NextRequest) {
             productId: item.productId || item.id || item.product_id || `product-${Math.random()}`,
             productName: item.productName || item.name || item.product_name || item.product || "Unknown Product",
             quantity: quantity, // Preserve actual quantity value (including 0)
-            status: item.status || "pending",
+            status: item.status || item.status_type || "pending",
+            status_type: item.status_type || item.status || "pending", // Include status_type from backend
+            // Include all other fields from Firestore
+            brand: item.brand || "",
+            color: item.color || "",
+            img: item.img || "",
+            modelNumber: item.modelNumber || item.model_number || "",
+            price: item.price || 0,
+            priceNum: item.priceNum || item.price_num || 0,
+            size: item.size || "",
+            // Include any other fields that might exist
+            ...(item.id !== undefined && { id: item.id }),
           };
         }) : [];
         
@@ -191,8 +197,21 @@ export async function GET(request: NextRequest) {
     });
     
     let errorMessage = error?.message || "Failed to fetch quotes";
-    if (error?.message?.includes("not initialized") || error?.message?.includes("Missing required")) {
-      errorMessage = "Firebase configuration error. Please check environment variables in production settings.";
+    
+    // Check for Firebase Admin initialization errors
+    if (error?.message?.includes("not initialized") || 
+        error?.message?.includes("Missing required") || 
+        error?.message?.includes("Firebase Admin") ||
+        error?.message?.includes(".env.local")) {
+      // The error message from firebase-admin.ts already includes helpful instructions
+      // Use it as-is, but ensure it's clear
+      const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || !!process.env.VERCEL;
+      if (isProduction && !errorMessage.includes("deployment platform")) {
+        errorMessage = "Firebase Admin SDK is not configured. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY environment variables in your deployment platform.";
+      } else if (!isProduction && !errorMessage.includes(".env.local")) {
+        errorMessage = "Firebase Admin SDK is not configured. Please add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY to your .env.local file.";
+      }
+      // If the error message already has instructions, use it as-is
     }
     
     return NextResponse.json(

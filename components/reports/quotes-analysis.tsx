@@ -345,7 +345,7 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                         </TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell className="font-medium text-orange-600">Зарцуулсан (Spent)</TableCell>
+                        <TableCell className="font-medium text-orange-600">Зарцуулсан (Зарлагын баримт)</TableCell>
                         <TableCell className="text-center font-bold text-lg text-orange-600">
                           {quotes.filter((q) => q.status === "spent").length}
                         </TableCell>
