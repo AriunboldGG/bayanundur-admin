@@ -96,6 +96,12 @@ export default function ProductsPage() {
   const [imageFiles, setImageFiles] = useState<File[]>([]) // Array of File objects for new uploads
   const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
   const [isUploadingImages, setIsUploadingImages] = useState(false)
+  
+  // Separate state for colors and sizes arrays
+  const [colors, setColors] = useState<string[]>([])
+  const [sizes, setSizes] = useState<string[]>([])
+  const [colorInput, setColorInput] = useState("")
+  const [sizeInput, setSizeInput] = useState("")
 
   // Fetch products from Firestore
   useEffect(() => {
@@ -168,12 +174,18 @@ export default function ProductsPage() {
   const handleOpenDialog = (product?: Product) => {
     if (product) {
       setEditingProduct(product)
-      const sizeValue = Array.isArray(product.size) 
-        ? product.size.join(", ") 
-        : product.size || ""
-      const colorValue = Array.isArray(product.color) 
-        ? product.color.join(", ") 
-        : product.color || ""
+      // Convert size and color to arrays for the UI
+      const sizeArray = Array.isArray(product.size) 
+        ? product.size 
+        : (product.size ? product.size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [])
+      const colorArray = Array.isArray(product.color) 
+        ? product.color 
+        : (product.color ? product.color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [])
+      
+      setColors(colorArray)
+      setSizes(sizeArray)
+      setColorInput("")
+      setSizeInput("")
       
       // Set all existing product data
       setFormData({
@@ -181,8 +193,8 @@ export default function ProductsPage() {
         price: product.price.toString(),
         stock: product.stock.toString(),
         brand: product.brand || "",
-        color: colorValue,
-        size: sizeValue,
+        color: "", // Will be managed by colors array
+        size: "", // Will be managed by sizes array
         material: product.material || "",
         description: product.description || "",
         feature: product.feature || "",
@@ -255,6 +267,10 @@ export default function ProductsPage() {
       setSelectedMainCategory("")
       setAvailableSubcategories([])
       setAvailableSubSubcategories([])
+      setColors([])
+      setSizes([])
+      setColorInput("")
+      setSizeInput("")
     }
     setIsDialogOpen(true)
   }
@@ -262,6 +278,10 @@ export default function ProductsPage() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false)
     setEditingProduct(null)
+    setColors([])
+    setSizes([])
+    setColorInput("")
+    setSizeInput("")
     setFormData({
       name: "",
       price: "",
@@ -476,13 +496,17 @@ export default function ProductsPage() {
     setIsUploadingImages(true)
     
     try {
-      // Convert size and color strings to arrays
-      const sizeArray = formData.size
-        ? formData.size.split(',').map(s => s.trim()).filter(s => s.length > 0)
-        : []
-      const colorArray = formData.color
-        ? formData.color.split(',').map(c => c.trim()).filter(c => c.length > 0)
-        : []
+      // Use the arrays from state instead of parsing strings
+      const sizeArray = sizes.filter(s => s.length > 0)
+      const colorArray = colors.filter(c => c.length > 0)
+      
+      // Validate required fields including colors and sizes
+      if (colorArray.length === 0 || sizeArray.length === 0) {
+        alert("Өнгө болон хэмжээ нэмнэ үү (Please add at least one color and size)")
+        setIsSubmitting(false)
+        setIsUploadingImages(false)
+        return
+      }
       
       // Get category names from IDs - always convert IDs to names
       // The function will return the name if ID is found, or return the value as-is if it's already a name
@@ -956,30 +980,120 @@ export default function ProductsPage() {
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="color">Өнгө (Color) *</Label>
-                      <Input
-                        id="color"
-                        value={formData.color}
-                        onChange={(e) =>
-                          setFormData({ ...formData, color: e.target.value })
-                        }
-                        placeholder="Red, Blue, Green"
-                        required
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          id="color"
+                          value={colorInput}
+                          onChange={(e) => setColorInput(e.target.value)}
+                          placeholder="Enter color (e.g., Red)"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              if (colorInput.trim() && !colors.includes(colorInput.trim())) {
+                                setColors([...colors, colorInput.trim()])
+                                setColorInput("")
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (colorInput.trim() && !colors.includes(colorInput.trim())) {
+                              setColors([...colors, colorInput.trim()])
+                              setColorInput("")
+                            }
+                          }}
+                          variant="outline"
+                          size="icon"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {colors.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {colors.map((color, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
+                            >
+                              <span>{color}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColors(colors.filter((_, i) => i !== index))
+                                }}
+                                className="hover:text-blue-600"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {colors.length === 0 && (
+                        <p className="text-xs text-muted-foreground">Add at least one color</p>
+                      )}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="size">Хэмжээ (Size) *</Label>
-                      <Input
-                        id="size"
-                        value={formData.size}
-                        onChange={(e) =>
-                          setFormData({ ...formData, size: e.target.value })
-                        }
-                        placeholder="M, L, XL, XXL"
-                        required
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          id="size"
+                          value={sizeInput}
+                          onChange={(e) => setSizeInput(e.target.value)}
+                          placeholder="Enter size (e.g., M)"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              if (sizeInput.trim() && !sizes.includes(sizeInput.trim())) {
+                                setSizes([...sizes, sizeInput.trim()])
+                                setSizeInput("")
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (sizeInput.trim() && !sizes.includes(sizeInput.trim())) {
+                              setSizes([...sizes, sizeInput.trim()])
+                              setSizeInput("")
+                            }
+                          }}
+                          variant="outline"
+                          size="icon"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {sizes.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {sizes.map((size, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm"
+                            >
+                              <span>{size}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSizes(sizes.filter((_, i) => i !== index))
+                                }}
+                                className="hover:text-green-600"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {sizes.length === 0 && (
+                        <p className="text-xs text-muted-foreground">Add at least one size</p>
+                      )}
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="material">Материал (Material) *</Label>

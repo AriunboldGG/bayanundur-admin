@@ -331,7 +331,7 @@ export const categories: Category[] = [
   },
   {
     id: "4",
-    name: "Бусад (Other)",
+    name: "Бусад",
     nameEn: "Other",
     icon: "package",
     children: [
