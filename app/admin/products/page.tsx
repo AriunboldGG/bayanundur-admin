@@ -47,8 +47,11 @@ interface Product {
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
   "model number"?: string // Модел дугаар (Model number)
+  product_code?: string // Product code (auto-generated)
+  brand_image?: string // Brand image URL
   productTypes?: string[] // Product types array (BEST SELLER, NEW, etc.)
   images?: string[] // Product images URLs
+  createdAt?: string // Creation date
 }
 
 export default function ProductsPage() {
@@ -77,6 +80,7 @@ export default function ProductsPage() {
     category: "", // Ангилал (subcategory)
     subcategory: "", // Дэд ангилал (sub-subcategory if exists)
     modelNumber: "", // Модел дугаар
+    productCode: "", // Product code (auto-generated)
     productTypes: [] as string[], // Product types array
   })
   
@@ -97,11 +101,66 @@ export default function ProductsPage() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
   const [isUploadingImages, setIsUploadingImages] = useState(false)
   
+  // Brand image state
+  const [brandImage, setBrandImage] = useState<string>("") // Brand image URL
+  const [brandImageFile, setBrandImageFile] = useState<File | null>(null) // Brand image file
+  const [brandImagePreview, setBrandImagePreview] = useState<string>("") // Brand image preview URL
+  
   // Separate state for colors and sizes arrays
   const [colors, setColors] = useState<string[]>([])
   const [sizes, setSizes] = useState<string[]>([])
   const [colorInput, setColorInput] = useState("")
   const [sizeInput, setSizeInput] = useState("")
+
+  // Function to generate product code based on main category
+  const generateProductCode = async (mainCategoryId: string): Promise<string> => {
+    if (!mainCategoryId) return ""
+    
+    // Get category name from ID
+    const mainCategoryName = getCategoryNameById(mainCategoryId)
+    if (!mainCategoryName) return ""
+    
+    // Get category prefix (e.g., "1" -> "CAT1", "2" -> "CAT2")
+    const categoryPrefix = `CAT${mainCategoryId}`
+    
+    // Fetch existing products to check for duplicates
+    try {
+      const response = await fetch("/api/products")
+      const result = await response.json()
+      
+      if (result.success) {
+        // Filter products with the same mainCategory (by name or ID) or same prefix
+        const sameCategoryProducts = result.data.filter((p: any) => 
+          p.mainCategory === mainCategoryName || 
+          p.mainCategory === mainCategoryId ||
+          (p.product_code && p.product_code.startsWith(categoryPrefix))
+        )
+        
+        // Find the highest number for this category
+        let maxNumber = 0
+        sameCategoryProducts.forEach((p: any) => {
+          if (p.product_code) {
+            const match = p.product_code.match(new RegExp(`^${categoryPrefix}-(\\d+)$`))
+            if (match) {
+              const num = parseInt(match[1], 10)
+              if (num > maxNumber) {
+                maxNumber = num
+              }
+            }
+          }
+        })
+        
+        // Generate next number (padded to 3 digits)
+        const nextNumber = (maxNumber + 1).toString().padStart(3, '0')
+        return `${categoryPrefix}-${nextNumber}`
+      }
+    } catch (error) {
+      console.error("Error generating product code:", error)
+    }
+    
+    // Fallback: return with 001 if no products found
+    return `${categoryPrefix}-001`
+  }
 
   // Fetch products from Firestore
   useEffect(() => {
@@ -145,9 +204,20 @@ export default function ProductsPage() {
           category: product.category || "",
           subcategory: product.subcategory || "",
           "model number": product["model number"] || product.model_number || product.modelNumber || "",
+          product_code: product.product_code || product.productCode || "",
+          brand_image: product.brand_image || product.brandImage || "",
           productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
           images: product.images || [],
+          createdAt: product.createdAt || product.created_at || "",
         }))
+        
+        // Sort by createdAt descending (newest first)
+        mappedProducts.sort((a: Product, b: Product) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          return dateB - dateA // Descending order (newest first)
+        })
+        
         setProducts(mappedProducts)
       } else {
         const errorMsg = result.error || "Failed to fetch products"
@@ -202,6 +272,7 @@ export default function ProductsPage() {
         category: product.category || "",
         subcategory: product.subcategory || "",
         modelNumber: product["model number"] || "",
+        productCode: product.product_code || "",
         productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
       })
       
@@ -209,6 +280,11 @@ export default function ProductsPage() {
       setProductImages(product.images || [])
       setImagePreviews(product.images || [])
       setImageFiles([])
+      
+      // Set brand image
+      setBrandImage(product.brand_image || "")
+      setBrandImagePreview(product.brand_image || "")
+      setBrandImageFile(null)
       
       // Set main category and load subcategories if mainCategory exists
       // Handle both names (new format) and IDs (old format) for backward compatibility
@@ -262,6 +338,7 @@ export default function ProductsPage() {
         category: "",
         subcategory: "",
         modelNumber: "",
+        productCode: "",
         productTypes: [],
       })
       setSelectedMainCategory("")
@@ -271,6 +348,9 @@ export default function ProductsPage() {
       setSizes([])
       setColorInput("")
       setSizeInput("")
+      setBrandImage("")
+      setBrandImageFile(null)
+      setBrandImagePreview("")
     }
     setIsDialogOpen(true)
   }
@@ -296,6 +376,7 @@ export default function ProductsPage() {
       category: "",
       subcategory: "",
       modelNumber: "",
+      productCode: "",
       productTypes: [],
     })
     setSelectedMainCategory("")
@@ -304,6 +385,9 @@ export default function ProductsPage() {
     setProductImages([])
     setImageFiles([])
     setImagePreviews([])
+    setBrandImage("")
+    setBrandImageFile(null)
+    setBrandImagePreview("")
   }
   
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -362,9 +446,38 @@ export default function ProductsPage() {
     }
   }
   
-  const handleMainCategoryChange = (mainCategoryId: string) => {
+  const handleBrandImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    if (file.type.startsWith('image/')) {
+      setBrandImageFile(file)
+      const preview = URL.createObjectURL(file)
+      setBrandImagePreview(preview)
+    }
+    
+    // Reset input
+    e.target.value = ''
+  }
+  
+  const handleRemoveBrandImage = () => {
+    if (brandImagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(brandImagePreview)
+    }
+    setBrandImage("")
+    setBrandImageFile(null)
+    setBrandImagePreview("")
+  }
+  
+  const handleMainCategoryChange = async (mainCategoryId: string) => {
     setSelectedMainCategory(mainCategoryId)
     setFormData({ ...formData, mainCategory: mainCategoryId, category: "", subcategory: "" })
+    
+    // Generate product code based on main category
+    if (mainCategoryId && !editingProduct) {
+      const productCode = await generateProductCode(mainCategoryId)
+      setFormData(prev => ({ ...prev, productCode }))
+    }
     
     // Find the selected main category
     const mainCat = categories.find(cat => cat.id === mainCategoryId)
@@ -541,7 +654,16 @@ export default function ProductsPage() {
       formDataToSend.append('category', categoryName) // Send name instead of ID
       formDataToSend.append('subcategory', subcategoryName) // Send name instead of ID
       formDataToSend.append('model_number', formData.modelNumber)
+      formDataToSend.append('product_code', formData.productCode)
       formDataToSend.append('productTypes', JSON.stringify(formData.productTypes))
+      
+      // Append brand image if selected
+      if (brandImageFile) {
+        formDataToSend.append('brand_image', brandImageFile)
+      } else if (editingProduct && brandImage) {
+        // For updates, include existing brand image URL if no new file is selected
+        formDataToSend.append('brand_image_url', brandImage)
+      }
       
       // Append new image files
       imageFiles.forEach((file) => {
@@ -677,7 +799,7 @@ export default function ProductsPage() {
           {!isLoading && products.length > 0 && (
             <div className="mb-6 p-4 border rounded-lg bg-muted/50">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold">Шүүлт (Filters)</h3>
+                <h3 className="text-sm font-semibold">Шүүлт</h3>
                 {(selectedCategory !== "all" || selectedStockStatus !== "all" || selectedBrand !== "all" || searchQuery !== "") && (
                   <Button
                     variant="ghost"
@@ -783,6 +905,8 @@ export default function ProductsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">№</TableHead>
+                  <TableHead>Барааны код</TableHead>
                   <TableHead>Нэр</TableHead>
                   <TableHead>Брэнд</TableHead>
                   <TableHead>Үндсэн ангилал</TableHead>
@@ -799,14 +923,14 @@ export default function ProductsPage() {
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="text-center text-muted-foreground">
                       {products.length === 0 
                         ? "No products found. Add your first product to get started."
                         : "No products match the selected filters."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredProducts.map((product) => {
+                  filteredProducts.map((product, index) => {
                     const sizeDisplay = Array.isArray(product.size) 
                       ? product.size.join(", ") 
                       : product.size || ""
@@ -833,6 +957,8 @@ export default function ProductsPage() {
                       : ""
                     return (
                       <TableRow key={product.id}>
+                        <TableCell className="text-center">{index + 1}</TableCell>
+                        <TableCell className="font-mono">{product.product_code || "-"}</TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell>{product.brand}</TableCell>
                         <TableCell>{mainCategoryDisplay}</TableCell>
@@ -966,6 +1092,20 @@ export default function ProductsPage() {
                     />
                   </div>
 
+                  {/* Product Code Field - Auto-generated */}
+                  {formData.productCode && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="productCode">Барааны код (Product Code)</Label>
+                      <Input
+                        id="productCode"
+                        value={formData.productCode}
+                        readOnly
+                        className="bg-muted cursor-not-allowed"
+                        placeholder="Auto-generated"
+                      />
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="brand">Брэнд (Brand) *</Label>
@@ -1033,6 +1173,59 @@ export default function ProductsPage() {
                       )}
                       {colors.length === 0 && (
                         <p className="text-xs text-muted-foreground">Add at least one color</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Brand Image Upload */}
+                  <div className="grid gap-2">
+                    <Label>Брэндийн зураг (Brand Image)</Label>
+                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <input
+                          type="file"
+                          id="brand-image-upload"
+                          accept="image/*"
+                          onChange={handleBrandImageSelect}
+                          className="hidden"
+                          disabled={isUploadingImages}
+                        />
+                        <label
+                          htmlFor="brand-image-upload"
+                          className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                            isUploadingImages
+                              ? "border-muted-foreground/25 bg-muted/50 cursor-not-allowed"
+                              : "border-primary/50 bg-muted/30 hover:bg-muted/50"
+                          }`}
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground text-center">
+                            {brandImagePreview
+                              ? "Брэндийн зураг сонгогдсон (Brand image selected)"
+                              : "Брэндийн зураг сонгох (Click to select brand image)"}
+                          </p>
+                        </label>
+                      </div>
+
+                      {/* Brand Image Preview */}
+                      {brandImagePreview && (
+                        <div className="relative mt-4 flex justify-center">
+                          <div className="relative group">
+                            <img
+                              src={brandImagePreview}
+                              alt="Brand preview"
+                              className="w-32 h-32 object-cover rounded-md border"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleRemoveBrandImage}
+                              className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              disabled={isUploadingImages}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

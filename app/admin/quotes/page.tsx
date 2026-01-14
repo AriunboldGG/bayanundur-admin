@@ -50,6 +50,16 @@ const statusLabels = {
   pending: "Хүлээгдэж буй",
 }
 
+const stockStatusColors = {
+  inStock: "bg-green-100 text-green-800 border-green-200",
+  preOrder: "bg-orange-100 text-orange-800 border-orange-200",
+}
+
+const stockStatusLabels = {
+  inStock: "Бэлэн байгаа",
+  preOrder: "Захиалгаар",
+}
+
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<PriceQuote[]>([])
@@ -69,6 +79,143 @@ export default function QuotesPage() {
   const [selectedForSpent, setSelectedForSpent] = useState<Set<string>>(new Set())
   const [selectedQuotes, setSelectedQuotes] = useState<Set<string>>(new Set())
   const [isDeleting, setIsDeleting] = useState(false)
+  const [quoteNumber, setQuoteNumber] = useState<string>("")
+  const [quoteDate, setQuoteDate] = useState<string>("")
+  const [companyNote, setCompanyNote] = useState<string>("")
+  const [companyAddress, setCompanyAddress] = useState<string>("УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
+  const [companyEmail, setCompanyEmail] = useState<string>("sales1@bayan-undur.mn")
+  const [companyPhone, setCompanyPhone] = useState<string>("70118585")
+  const [companyMobile, setCompanyMobile] = useState<string>("99080867")
+  const [sendOfferQuantities, setSendOfferQuantities] = useState<Record<string, number>>({})
+  const [sendOfferDeliveryTimes, setSendOfferDeliveryTimes] = useState<Record<string, string>>({})
+
+  // Generate quote number when dialog opens
+  useEffect(() => {
+    if (isSendOfferDialogOpen && selectedQuote) {
+      const currentDate = new Date().toISOString().split("T")[0]
+      setQuoteDate(currentDate)
+      
+      // Initialize company note and company info from saved data
+      setCompanyNote((selectedQuote as any).companyNote || "")
+      setCompanyAddress((selectedQuote as any).companyAddress || "УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
+      setCompanyEmail((selectedQuote as any).companyEmail || "sales1@bayan-undur.mn")
+      setCompanyPhone((selectedQuote as any).companyPhone || "70118585")
+      setCompanyMobile((selectedQuote as any).companyMobile || "99080867")
+      
+      // Initialize quantities and delivery times for selected products
+      const initialQuantities: Record<string, number> = {}
+      const initialDeliveryTimes: Record<string, string> = {}
+      selectedQuote.selectedProducts
+        .filter(product => selectedForSendOffer.has(product.productId))
+        .forEach(product => {
+          const productId = product.productId || (product as any).id || `product-${Math.random()}`
+          initialQuantities[productId] = product.quantity || 0
+          initialDeliveryTimes[productId] = (product as any).delivery_time || (product as any).deliveryTime || ""
+        })
+      setSendOfferQuantities(initialQuantities)
+      setSendOfferDeliveryTimes(initialDeliveryTimes)
+      
+      // Generate quote number asynchronously
+      let isMounted = true
+      generateQuoteNumber(currentDate)
+        .then((number) => {
+          if (isMounted) {
+            setQuoteNumber(number)
+          }
+        })
+        .catch((error) => {
+          console.error("Error generating quote number:", error)
+          if (isMounted) {
+            // Fallback: generate a simple number if API fails
+            const year = new Date().getFullYear()
+            const month = String(new Date().getMonth() + 1).padStart(2, '0')
+            const day = String(new Date().getDate()).padStart(2, '0')
+            setQuoteNumber(`BU-QT-${year}${month}${day}-001`)
+          }
+        })
+      
+      return () => {
+        isMounted = false
+      }
+    } else if (!isSendOfferDialogOpen) {
+      // Reset when dialog closes
+      setQuoteNumber("")
+      setQuoteDate("")
+      setCompanyNote("")
+      setCompanyAddress("УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
+      setCompanyEmail("sales1@bayan-undur.mn")
+      setCompanyPhone("70118585")
+      setCompanyMobile("99080867")
+      setSendOfferQuantities({})
+      setSendOfferDeliveryTimes({})
+    }
+  }, [isSendOfferDialogOpen, selectedQuote?.id])
+
+  // Function to generate quote number in format: BU-QT-YYYYMMDD-XXX
+  const generateQuoteNumber = async (quoteDate?: string): Promise<string> => {
+    // Use provided date or current date
+    const date = quoteDate ? new Date(quoteDate) : new Date()
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${year}${month}${day}` // YYYYMMDD format
+    
+    // Format: BU-QT-YYYYMMDD-XXX
+    const prefix = `BU-QT-${dateStr}`
+    
+    try {
+      // Fetch all quotes to check for existing quote numbers
+      const response = await fetch("/api/quotes")
+      const result = await response.json()
+      
+      if (result.success) {
+        // Filter quotes that match the date pattern
+        const sameDateQuotes = result.data.filter((quote: PriceQuote) => {
+          // Check if quote has a quoteNumber field that matches our pattern
+          const quoteNumber = (quote as any).quoteNumber || ""
+          if (quoteNumber && quoteNumber.startsWith(prefix)) {
+            return true
+          }
+          
+          // Also check createdAt to see if it's the same date (for quotes without quoteNumber)
+          if (quote.createdAt) {
+            const quoteDate = new Date(quote.createdAt)
+            const quoteYear = quoteDate.getFullYear()
+            const quoteMonth = String(quoteDate.getMonth() + 1).padStart(2, '0')
+            const quoteDay = String(quoteDate.getDate()).padStart(2, '0')
+            const quoteDateStr = `${quoteYear}${quoteMonth}${quoteDay}`
+            return quoteDateStr === dateStr
+          }
+          return false
+        })
+        
+        // Find the highest sequential number for this date
+        let maxNumber = 0
+        sameDateQuotes.forEach((quote: PriceQuote) => {
+          const quoteNumber = (quote as any).quoteNumber || ""
+          if (quoteNumber && quoteNumber.startsWith(prefix)) {
+            // Extract the sequential number (XXX part)
+            const match = quoteNumber.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`))
+            if (match) {
+              const num = parseInt(match[1], 10)
+              if (num > maxNumber) {
+                maxNumber = num
+              }
+            }
+          }
+        })
+        
+        // Generate next number (padded to 3 digits)
+        const nextNumber = (maxNumber + 1).toString().padStart(3, '0')
+        return `${prefix}-${nextNumber}`
+      }
+    } catch (error) {
+      console.error("Error generating quote number:", error)
+    }
+    
+    // Fallback: return with 001 if no quotes found for this date
+    return `${prefix}-001`
+  }
 
   // Fetch quotes from Firebase
   useEffect(() => {
@@ -359,65 +506,174 @@ export default function QuotesPage() {
       sections: [{
         children: [
           new Paragraph({
-            text: "SENT OFFER FORM",
+            text: "Үнийн санал илгээх форм",
             heading: "Heading1",
             alignment: AlignmentType.CENTER,
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Quote Number: ", bold: true }),
-              new TextRun({ text: `Q-${selectedQuote.id}` }),
+              new TextRun({ text: "Үнийн саналын дугаар: ", bold: true }),
+              new TextRun({ text: quoteNumber || `BU-QT-${new Date().toISOString().split("T")[0]}-001` }),
             ],
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Date: ", bold: true }),
-              new TextRun({ text: formatDate(selectedQuote.createdAt) }),
+              new TextRun({ text: "Огноо: ", bold: true }),
+              new TextRun({ text: quoteDate ? formatDate(quoteDate) : formatDate(selectedQuote.createdAt) }),
             ],
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Customer: ", bold: true }),
+              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
               new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
             ],
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Company: ", bold: true }),
+              new TextRun({ text: "Компани: ", bold: true }),
               new TextRun({ text: selectedQuote.company }),
             ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
-            text: "Selected Products",
+            text: "Манай компанийн мэдээлэл",
+            heading: "Heading2",
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Хаяг: ", bold: true }),
+              new TextRun({ text: companyAddress }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Email: ", bold: true }),
+              new TextRun({ text: companyEmail }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Утас, Факс: ", bold: true }),
+              new TextRun({ text: companyPhone }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Гар утас: ", bold: true }),
+              new TextRun({ text: companyMobile }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            text: "Сонгосон бараа",
             heading: "Heading2",
           }),
           new DocxTable({
             rows: [
               new DocxTableRow({
                 children: [
-                  new DocxTableCell({ children: [new Paragraph("Product Name")] }),
-                  new DocxTableCell({ children: [new Paragraph("Quantity")] }),
+                  new DocxTableCell({ children: [new Paragraph("№")] }),
+                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
+                  new DocxTableCell({ children: [new Paragraph("Код")] }),
+                  new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
+                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
+                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
                 ],
               }),
-              ...selectedProducts.map(product =>
-                new DocxTableRow({
+              ...selectedProducts.map((product, index) => {
+                const productId = product.productId || (product as any).id || `product-${Math.random()}`
+                const unitPrice = (product as any).price || (product as any).priceNum || 0
+                const quantity = sendOfferQuantities[productId] !== undefined 
+                  ? sendOfferQuantities[productId] 
+                  : (product.quantity || 0)
+                const total = unitPrice * quantity
+                const productCode = (product as any).product_code || (product as any).productCode || ""
+                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                const deliveryTime = sendOfferDeliveryTimes[productId] !== undefined 
+                  ? sendOfferDeliveryTimes[productId] 
+                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                const statusLabel = stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock
+                
+                // Format delivery time date if it exists
+                let deliveryTimeDisplay = "-"
+                if (deliveryTime) {
+                  try {
+                    const date = new Date(deliveryTime)
+                    if (!isNaN(date.getTime())) {
+                      deliveryTimeDisplay = date.toLocaleDateString("mn-MN")
+                    } else {
+                      deliveryTimeDisplay = deliveryTime
+                    }
+                  } catch {
+                    deliveryTimeDisplay = deliveryTime
+                  }
+                }
+                
+                return new DocxTableRow({
                   children: [
-                    new DocxTableCell({ children: [new Paragraph(product.productName)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(product.quantity || "N/A"))] }),
+                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
+                    new DocxTableCell({ children: [new Paragraph(transactionDescription)] }),
+                    new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
+                    new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
+                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
+                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
+                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
                   ],
                 })
-              ),
+              }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Additional Notes: ", bold: true }),
-              new TextRun({ text: selectedQuote.additionalInfo }),
+              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
+              new TextRun({ text: selectedQuote.additionalInfo || "" }),
             ],
+          }),
+          ...(companyNote ? [new Paragraph({
+            children: [
+              new TextRun({ text: "Company Note: ", bold: true }),
+              new TextRun({ text: companyNote }),
+            ],
+          })] : []),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          // Stamp and Signature Section
+          new DocxTable({
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Тэмдэг: ", bold: true }),
+                      ],
+                    })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
+                        new TextRun({ text: "_________________ / _________________ / _________________" }),
+                      ],
+                    })],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
           }),
         ],
       }],
@@ -1127,7 +1383,6 @@ export default function QuotesPage() {
                         <TableRow>
                           <TableHead>ID</TableHead>
                           <TableHead>Барааны нэр</TableHead>
-                          <TableHead>Зураг</TableHead>
                           <TableHead>Брэнд</TableHead>
                           <TableHead>Өнгө</TableHead>
                           <TableHead>Хэмжээ</TableHead>
@@ -1150,7 +1405,7 @@ export default function QuotesPage() {
                           if (items.length === 0) {
                             return (
                               <TableRow>
-                                <TableCell colSpan={15} className="text-center text-muted-foreground py-4">
+                                <TableCell colSpan={14} className="text-center text-muted-foreground py-4">
                                   Бараа олдсонгүй (No products found)
                                 </TableCell>
                               </TableRow>
@@ -1185,17 +1440,6 @@ export default function QuotesPage() {
                                 </TableCell>
                                 <TableCell className="font-medium">
                                   {productName}
-                                </TableCell>
-                                <TableCell>
-                                  {product.img ? (
-                                    <img 
-                                      src={product.img} 
-                                      alt={productName}
-                                      className="w-12 h-12 object-cover rounded"
-                                    />
-                                  ) : (
-                                    <span className="text-muted-foreground text-sm">-</span>
-                                  )}
                                 </TableCell>
                                 <TableCell>{product.brand || "-"}</TableCell>
                                 <TableCell>{product.color || "-"}</TableCell>
@@ -1362,11 +1606,11 @@ export default function QuotesPage() {
 
       {/* Send Offer Form Dialog */}
       <Dialog open={isSendOfferDialogOpen} onOpenChange={setIsSendOfferDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Sent Offer Form</DialogTitle>
+            <DialogTitle>Үнийн санал илгээх форм</DialogTitle>
             <DialogDescription>
-              Create and send price offer for selected products
+              Сонгосон бараануудын үнийн санал илгээх форм
             </DialogDescription>
           </DialogHeader>
 
@@ -1375,31 +1619,35 @@ export default function QuotesPage() {
               <>
                 {/* Quote Information */}
                 <div>
-                  <h3 className="text-base sm:text-lg font-semibold mb-3">Quote Information</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Quote Number</Label>
+                      <Label>Үнийн саналын дугаар</Label>
                       <Input
-                        placeholder="Auto-generated or enter manually"
-                        defaultValue={`Q-${selectedQuote.id}`}
+                        value={quoteNumber}
+                        readOnly
+                        className="bg-muted cursor-not-allowed"
+                        placeholder=""
                       />
                     </div>
                     <div>
-                      <Label>Date</Label>
+                      <Label>Огноо</Label>
                       <Input
                         type="date"
-                        defaultValue={new Date().toISOString().split("T")[0]}
+                        value={quoteDate || new Date().toISOString().split("T")[0]}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
                       />
                     </div>
                     <div>
-                      <Label>Customer</Label>
+                      <Label>Худалдан авагчийн нэр</Label>
                       <Input
                         value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
                         disabled
                       />
                     </div>
                     <div>
-                      <Label>Company</Label>
+                      <Label>Харигчийн Компани</Label>
                       <Input value={selectedQuote.company} disabled />
                     </div>
                   </div>
@@ -1407,47 +1655,164 @@ export default function QuotesPage() {
 
                 {/* Products to Include */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Select Products</h3>
-                  <div className="border rounded-md">
-                    <Table>
+                  <h3 className="text-lg font-semibold mb-3">Сонгосон бараанууд</h3>
+                  <div className="border rounded-md overflow-x-auto">
+                    <Table className="w-full">
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Product Name</TableHead>
-                          <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right">Unit Price</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="w-12">№</TableHead>
+                          <TableHead>Гүйлгээний утга</TableHead>
+                          <TableHead>Код</TableHead>
+                          <TableHead>Хэмжих нэгж</TableHead>
+                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead>Барааны төлөв</TableHead>
+                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedQuote.selectedProducts
                           .filter(product => selectedForSendOffer.has(product.productId))
-                          .map((product, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium">{product.productName}</TableCell>
-                            <TableCell className="text-right">{product.quantity || "N/A"}</TableCell>
-                            <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                className="w-24 text-right"
-                              />
-                            </TableCell>
-                            <TableCell className="text-right">-</TableCell>
-                          </TableRow>
-                        ))}
+                          .map((product, index) => {
+                            const productId = product.productId || (product as any).id || `product-${index}`
+                            const unitPrice = (product as any).price || (product as any).priceNum || 0
+                            const quantity = sendOfferQuantities[productId] !== undefined 
+                              ? sendOfferQuantities[productId] 
+                              : (product.quantity || 0)
+                            const total = unitPrice * quantity
+                            const productCode = (product as any).product_code || (product as any).productCode || ""
+                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                            const deliveryTime = sendOfferDeliveryTimes[productId] !== undefined 
+                              ? sendOfferDeliveryTimes[productId] 
+                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                            
+                            return (
+                              <TableRow key={index}>
+                                <TableCell className="text-center">{index + 1}</TableCell>
+                                <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                <TableCell>{productCode || "-"}</TableCell>
+                                <TableCell>{unitOfMeasurement}</TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={quantity}
+                                    onChange={(e) => {
+                                      const newQuantity = parseFloat(e.target.value) || 0
+                                      setSendOfferQuantities({
+                                        ...sendOfferQuantities,
+                                        [productId]: newQuantity
+                                      })
+                                    }}
+                                    className="w-20 text-right"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="min-w-[180px]">
+                                  <Input
+                                    type="date"
+                                    value={deliveryTime}
+                                    onChange={(e) => {
+                                      setSendOfferDeliveryTimes({
+                                        ...sendOfferDeliveryTimes,
+                                        [productId]: e.target.value
+                                      })
+                                    }}
+                                    className="w-full"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[140px]">
+                                  <Input
+                                    type="number"
+                                    value={unitPrice}
+                                    readOnly
+                                    className="w-full text-right bg-muted cursor-not-allowed font-medium"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[180px]">
+                                  <Input
+                                    type="number"
+                                    value={total}
+                                    readOnly
+                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                       </TableBody>
                     </Table>
                   </div>
                 </div>
 
-                {/* Additional Notes */}
+                {/* Нэмэлт мэдээлэл */}
                 <div>
-                  <Label>Additional Notes</Label>
+                  <Label>Нэмэлт мэдээлэл</Label>
                   <textarea
-                    className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Add any additional notes or terms..."
-                    defaultValue={selectedQuote.additionalInfo}
+                    className="w-full min-h-[100px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
+                    placeholder="Add any Нэмэлт мэдээлэл or terms..."
+                    value={selectedQuote.additionalInfo || ""}
+                    readOnly
+                    disabled
                   />
+                </div>
+
+                {/* Company Note */}
+                <div>
+                  <Label>Company Note</Label>
+                  <textarea
+                    className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Enter company note (will be displayed in Invoice form)..."
+                    value={companyNote}
+                    onChange={(e) => setCompanyNote(e.target.value)}
+                  />
+                </div>
+
+                {/* Our Company Info */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Манай компанийн мэдээлэл </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Хаяг</Label>
+                      <Input
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
+                        placeholder="Enter company address"
+                      />
+                    </div>
+                    <div>
+                      <Label>Имэйл хаяг</Label>
+                      <Input
+                        type="email"
+                        value={companyEmail}
+                        onChange={(e) => setCompanyEmail(e.target.value)}
+                        placeholder="Enter email"
+                      />
+                    </div>
+                    <div>
+                      <Label>Утас</Label>
+                      <Input
+                        value={companyPhone}
+                        onChange={(e) => setCompanyPhone(e.target.value)}
+                        placeholder="Enter phone/fax"
+                      />
+                    </div>
+                    <div>
+                      <Label>Гар утас </Label>
+                      <Input
+                        value={companyMobile}
+                        onChange={(e) => setCompanyMobile(e.target.value)}
+                        placeholder="Enter mobile phone"
+                      />
+                    </div>
+                  </div>
                 </div>
 
               
@@ -1456,21 +1821,60 @@ export default function QuotesPage() {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={handleDownloadSendOfferWord}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Татаж авах
-            </Button>
             <Button variant="outline" onClick={() => setIsSendOfferDialogOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={async () => {
-                // Handle save action - update status to sent_offer
+                // Handle save action - update status to sent_offer and save company note and company info
                 if (selectedQuote) {
                   try {
+                    // Update selected products with new quantities and delivery times
+                    const updatedProducts = selectedQuote.selectedProducts.map((product) => {
+                      const productId = product.productId || (product as any).id || ""
+                      if (selectedForSendOffer.has(product.productId)) {
+                        return {
+                          ...product,
+                          quantity: sendOfferQuantities[productId] !== undefined 
+                            ? sendOfferQuantities[productId] 
+                            : (product.quantity || 0),
+                          delivery_time: sendOfferDeliveryTimes[productId] !== undefined 
+                            ? sendOfferDeliveryTimes[productId] 
+                            : ((product as any).delivery_time || (product as any).deliveryTime || ""),
+                          status: "sent_offer",
+                        }
+                      }
+                      return product
+                    })
+                    
+                    // Save company note, company info, and updated products
+                    const hasChanges = 
+                      companyNote !== ((selectedQuote as any).companyNote || "") ||
+                      companyAddress !== ((selectedQuote as any).companyAddress || "") ||
+                      companyEmail !== ((selectedQuote as any).companyEmail || "") ||
+                      companyPhone !== ((selectedQuote as any).companyPhone || "") ||
+                      companyMobile !== ((selectedQuote as any).companyMobile || "") ||
+                      JSON.stringify(updatedProducts) !== JSON.stringify(selectedQuote.selectedProducts)
+                    
+                    if (hasChanges) {
+                      const response = await fetch(`/api/quotes/${selectedQuote.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          companyNote: companyNote,
+                          companyAddress: companyAddress,
+                          companyEmail: companyEmail,
+                          companyPhone: companyPhone,
+                          companyMobile: companyMobile,
+                          selectedProducts: updatedProducts,
+                        }),
+                      })
+                      const result = await response.json()
+                      if (!result.success) {
+                        throw new Error(result.error || "Failed to save company information")
+                      }
+                    }
+                    
                     // Update only selected products to "sent_offer" status
                     const updatePromises = selectedQuote.selectedProducts
                       .filter(product => selectedForSendOffer.has(product.productId))
@@ -1483,11 +1887,19 @@ export default function QuotesPage() {
                     await fetchQuotes() // Refresh quotes list
                   } catch (error) {
                     console.error("Error saving offer:", error)
+                    alert("Failed to save. Please try again.")
                   }
                 }
               }}
             >
-              Хадгалах 
+              Хадгалах
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadSendOfferWord}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Татаж авах
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1585,6 +1997,17 @@ export default function QuotesPage() {
                       <Label>Хаяг (Address)</Label>
                       <Input placeholder="Enter buyer address" />
                     </div>
+                    {(selectedQuote as any).companyNote && (
+                      <div className="col-span-2">
+                        <Label>Company Note</Label>
+                        <textarea
+                          className="w-full min-h-[80px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
+                          value={(selectedQuote as any).companyNote || ""}
+                          readOnly
+                          disabled
+                        />
+                      </div>
+                    )}
                     <div>
                       <Label>Гэрээний дугаар (Agreement Number)</Label>
                       <Input placeholder="Enter agreement number" />

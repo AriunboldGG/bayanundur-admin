@@ -193,6 +193,7 @@ export async function PUT(
         category: formData.get("category") as string,
         subcategory: formData.get("subcategory") as string || "",
         model_number: formData.get("model_number") as string || "",
+        product_code: formData.get("product_code") as string || "",
         productTypes: productTypes,
         updatedAt: new Date().toISOString(),
       };
@@ -218,6 +219,24 @@ export async function PUT(
 
       // Combine preserved and newly uploaded images
       productData.images = [...preservedImages, ...imageUrls];
+
+      // Handle brand image upload
+      const brandImageFile = formData.get("brand_image") as File;
+      const brandImageUrl = formData.get("brand_image_url") as string;
+      
+      if (brandImageFile && brandImageFile instanceof File && brandImageFile.type.startsWith('image/')) {
+        // Upload new brand image
+        const brandImageUrls = await uploadImagesToStorage([brandImageFile]);
+        if (brandImageUrls.length > 0) {
+          productData.brand_image = brandImageUrls[0];
+        }
+      } else if (brandImageUrl) {
+        // Preserve existing brand image URL
+        productData.brand_image = brandImageUrl;
+      } else {
+        // Preserve existing brand image from database if no new file and no URL provided
+        productData.brand_image = existingData?.brand_image || "";
+      }
     } else {
       // Handle JSON request (backward compatibility)
       const body = await request.json();
@@ -231,6 +250,8 @@ export async function PUT(
         category, 
         subcategory, 
         model_number,
+        product_code,
+        brand_image,
         images,
         material,
         description,
@@ -253,6 +274,8 @@ export async function PUT(
         category: category || "",
         subcategory: subcategory || "",
         model_number: model_number || "",
+        product_code: product_code || "",
+        brand_image: brand_image || "",
         productTypes: Array.isArray(productTypes) ? productTypes : [],
         images: images || [],
         updatedAt: new Date().toISOString(),

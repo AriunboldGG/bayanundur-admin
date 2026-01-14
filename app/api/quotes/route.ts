@@ -99,6 +99,11 @@ export async function GET(request: NextRequest) {
             price: item.price || 0,
             priceNum: item.priceNum || item.price_num || 0,
             size: item.size || "",
+            product_code: item.product_code || item.productCode || "",
+            unit_of_measurement: item.unit_of_measurement || item.unitOfMeasurement || item.unit || "ш",
+            delivery_time: item.delivery_time || item.deliveryTime || "",
+            transaction_description: item.transaction_description || item.transactionDescription || item.productName || "",
+            stockStatus: item.stockStatus || item.stock_status || "inStock", // Product stock status (inStock or preOrder)
             // Include any other fields that might exist
             ...(item.id !== undefined && { id: item.id }),
           };
@@ -154,6 +159,11 @@ export async function GET(request: NextRequest) {
           additionalInfo: additionalInfo, // Map both 'note' and 'additionalInfo' to 'additionalInfo'
           position: data.position || "",
           company: data.company || "",
+          companyNote: data.companyNote || "",
+          companyAddress: data.companyAddress || "",
+          companyEmail: data.companyEmail || "",
+          companyPhone: data.companyPhone || "",
+          companyMobile: data.companyMobile || "",
           status: data.status || "pending",
           quoteStatus: data.quoteStatus || "new",
           createdAt, // Always include createdAt

@@ -98,6 +98,11 @@ export async function GET(
       additionalInfo: additionalInfo, // Map both 'note' and 'additionalInfo' to 'additionalInfo'
       position: data?.position || "",
       company: data?.company || "",
+      companyNote: data?.companyNote || "",
+      companyAddress: data?.companyAddress || "",
+      companyEmail: data?.companyEmail || "",
+      companyPhone: data?.companyPhone || "",
+      companyMobile: data?.companyMobile || "",
       status: data?.status || "pending",
       quoteStatus: data?.quoteStatus || "new",
       createdAt, // Always include createdAt
@@ -168,6 +173,11 @@ export async function PUT(
     addField("additionalInfo", quoteData.additionalInfo);
     addField("position", quoteData.position);
     addField("company", quoteData.company);
+    addField("companyNote", quoteData.companyNote);
+    addField("companyAddress", quoteData.companyAddress);
+    addField("companyEmail", quoteData.companyEmail);
+    addField("companyPhone", quoteData.companyPhone);
+    addField("companyMobile", quoteData.companyMobile);
     
     // Handle selectedProducts/items - always include if provided (even if empty array)
     if (quoteData.selectedProducts !== undefined) {
