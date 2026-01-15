@@ -30,7 +30,6 @@ import {
 import { Plus, Pencil, Trash2, X, Upload, XCircle, Search, Check } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { categories, Category } from "@/lib/categories"
 
 interface Product {
   id: string
@@ -52,6 +51,24 @@ interface Product {
   productTypes?: string[] // Product types array (BEST SELLER, NEW, etc.)
   images?: string[] // Product images URLs
   createdAt?: string // Creation date
+}
+
+interface MainCategoryItem {
+  id: string
+  name: string
+}
+
+interface CategoryItem {
+  id: string
+  name: string
+  mainCategoryId?: string
+}
+
+interface SubcategoryItem {
+  id: string
+  name: string
+  categoryId?: string
+  mainCategoryId?: string
 }
 
 export default function ProductsPage() {
@@ -94,8 +111,11 @@ export default function ProductsPage() {
   ]
   
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>("")
-  const [availableSubcategories, setAvailableSubcategories] = useState<Category[]>([])
-  const [availableSubSubcategories, setAvailableSubSubcategories] = useState<Category[]>([])
+  const [availableSubcategories, setAvailableSubcategories] = useState<CategoryItem[]>([])
+  const [availableSubSubcategories, setAvailableSubSubcategories] = useState<SubcategoryItem[]>([])
+  const [mainCategoriesList, setMainCategoriesList] = useState<MainCategoryItem[]>([])
+  const [categoriesList, setCategoriesList] = useState<CategoryItem[]>([])
+  const [subcategoriesList, setSubcategoriesList] = useState<SubcategoryItem[]>([])
   const [productImages, setProductImages] = useState<string[]>([]) // Array of image URLs
   const [imageFiles, setImageFiles] = useState<File[]>([]) // Array of File objects for new uploads
   const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
@@ -162,10 +182,93 @@ export default function ProductsPage() {
     return `${categoryPrefix}-001`
   }
 
-  // Fetch products from Firestore
+  // Fetch products and categories from Firestore
   useEffect(() => {
     fetchProducts()
+    fetchAllCategories()
   }, [])
+
+  const fetchAllCategories = async () => {
+    try {
+      const [mainResponse, categoriesResponse, subcategoriesResponse] = await Promise.all([
+        fetch("/api/categories/main"),
+        fetch("/api/categories/categories"),
+        fetch("/api/categories/subcategories"),
+      ])
+
+      const [mainResult, categoriesResult, subcategoriesResult] = await Promise.all([
+        mainResponse.json(),
+        categoriesResponse.json(),
+        subcategoriesResponse.json(),
+      ])
+
+      if (mainResult.success) {
+        setMainCategoriesList(mainResult.data)
+      }
+
+      if (categoriesResult.success) {
+        setCategoriesList(categoriesResult.data)
+      }
+
+      if (subcategoriesResult.success) {
+        setSubcategoriesList(subcategoriesResult.data)
+      }
+    } catch (err) {
+      console.error("Error fetching categories:", err)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedMainCategory) {
+      setAvailableSubcategories(
+        categoriesList.filter(cat => cat.mainCategoryId === selectedMainCategory)
+      )
+    }
+  }, [selectedMainCategory, categoriesList])
+
+  useEffect(() => {
+    if (formData.category) {
+      setAvailableSubSubcategories(
+        subcategoriesList.filter(sub => sub.categoryId === formData.category)
+      )
+    }
+  }, [formData.category, subcategoriesList])
+
+  useEffect(() => {
+    if (selectedMainCategory && mainCategoriesList.length > 0) {
+      const hasId = mainCategoriesList.some(cat => cat.id === selectedMainCategory)
+      if (!hasId) {
+        const resolved = getCategoryIdByName(selectedMainCategory)
+        if (resolved && resolved !== selectedMainCategory) {
+          setSelectedMainCategory(resolved)
+        }
+      }
+    }
+  }, [selectedMainCategory, mainCategoriesList])
+
+  useEffect(() => {
+    if (formData.category && categoriesList.length > 0) {
+      const hasId = categoriesList.some(cat => cat.id === formData.category)
+      if (!hasId) {
+        const resolved = getCategoryIdByName(formData.category)
+        if (resolved && resolved !== formData.category) {
+          setFormData(prev => ({ ...prev, category: resolved }))
+        }
+      }
+    }
+  }, [formData.category, categoriesList])
+
+  useEffect(() => {
+    if (formData.subcategory && subcategoriesList.length > 0) {
+      const hasId = subcategoriesList.some(sub => sub.id === formData.subcategory)
+      if (!hasId) {
+        const resolved = getCategoryIdByName(formData.subcategory)
+        if (resolved && resolved !== formData.subcategory) {
+          setFormData(prev => ({ ...prev, subcategory: resolved }))
+        }
+      }
+    }
+  }, [formData.subcategory, subcategoriesList])
 
   const fetchProducts = async () => {
     try {
@@ -289,33 +392,25 @@ export default function ProductsPage() {
       // Set main category and load subcategories if mainCategory exists
       // Handle both names (new format) and IDs (old format) for backward compatibility
       if (product.mainCategory) {
-        // Try to find by ID first, then by name
         const mainCategoryId = getCategoryIdByName(product.mainCategory)
         setSelectedMainCategory(mainCategoryId)
-        const mainCat = categories.find(cat => cat.id === mainCategoryId || cat.name === product.mainCategory)
-        if (mainCat && mainCat.children) {
-          setAvailableSubcategories(mainCat.children)
+        setAvailableSubcategories(
+          categoriesList.filter(cat => cat.mainCategoryId === mainCategoryId)
+        )
+        
+        if (product.category) {
+          const categoryId = getCategoryIdByName(product.category)
+          setFormData(prev => ({ ...prev, category: categoryId }))
+          setAvailableSubSubcategories(
+            subcategoriesList.filter(sub => sub.categoryId === categoryId)
+          )
           
-          // If category is set, check for sub-subcategories
-          if (product.category) {
-            const categoryId = getCategoryIdByName(product.category)
-            // Update formData with ID for proper selection
-            setFormData(prev => ({ ...prev, category: categoryId }))
-            const subCat = mainCat.children.find(sub => sub.id === categoryId || sub.name === product.category)
-            if (subCat && subCat.children) {
-              setAvailableSubSubcategories(subCat.children)
-              
-              // If subcategory is set, update formData with ID
-              if (product.subcategory) {
-                const subcategoryId = getCategoryIdByName(product.subcategory)
-                setFormData(prev => ({ ...prev, subcategory: subcategoryId }))
-              }
-            } else {
-              setAvailableSubSubcategories([])
-            }
-          } else {
-            setAvailableSubSubcategories([])
+          if (product.subcategory) {
+            const subcategoryId = getCategoryIdByName(product.subcategory)
+            setFormData(prev => ({ ...prev, subcategory: subcategoryId }))
           }
+        } else {
+          setAvailableSubSubcategories([])
         }
       } else {
         setSelectedMainCategory("")
@@ -479,30 +574,17 @@ export default function ProductsPage() {
       setFormData(prev => ({ ...prev, productCode }))
     }
     
-    // Find the selected main category
-    const mainCat = categories.find(cat => cat.id === mainCategoryId)
-    if (mainCat && mainCat.children) {
-      setAvailableSubcategories(mainCat.children)
-      setAvailableSubSubcategories([])
-    } else {
-      setAvailableSubcategories([])
-      setAvailableSubSubcategories([])
-    }
+    // Find categories for the selected main category
+    const filteredCategories = categoriesList.filter(cat => cat.mainCategoryId === mainCategoryId)
+    setAvailableSubcategories(filteredCategories)
+    setAvailableSubSubcategories([])
   }
   
   const handleSubcategoryChange = (subcategoryId: string) => {
     setFormData({ ...formData, category: subcategoryId, subcategory: "" })
     
-    // Find the selected subcategory
-    const mainCat = categories.find(cat => cat.id === selectedMainCategory)
-    if (mainCat && mainCat.children) {
-      const subCat = mainCat.children.find(sub => sub.id === subcategoryId)
-      if (subCat && subCat.children) {
-        setAvailableSubSubcategories(subCat.children)
-      } else {
-        setAvailableSubSubcategories([])
-      }
-    }
+    const filteredSubcategories = subcategoriesList.filter(sub => sub.categoryId === subcategoryId)
+    setAvailableSubSubcategories(filteredSubcategories)
   }
   
   const handleSubSubcategoryChange = (subSubcategoryId: string) => {
@@ -512,39 +594,17 @@ export default function ProductsPage() {
   // Helper function to get category name by ID
   const getCategoryNameById = (categoryId: string): string => {
     if (!categoryId) return ""
-    
-    // If it's already a name (doesn't match ID pattern), return as is
-    // ID patterns: "1", "1-2", "1-2-3" (numbers with optional dashes)
-    const isIdPattern = /^\d+(-\d+)*$/.test(categoryId)
-    if (!isIdPattern) {
-      // Already a name, return as is
-      return categoryId
-    }
-    
-    // Check main categories (single digit like "1", "2", "3")
-    const mainCat = categories.find(cat => cat.id === categoryId)
+
+    const mainCat = mainCategoriesList.find(cat => cat.id === categoryId)
     if (mainCat) return mainCat.name
-    
-    // Check subcategories (format like "1-2", "2-1") and sub-subcategories (format like "1-2-3", "2-2-1")
-    for (const mainCat of categories) {
-      if (mainCat.children) {
-        for (const subCat of mainCat.children) {
-          // Check if this is the subcategory we're looking for
-          if (subCat.id === categoryId) {
-            return subCat.name
-          }
-          
-          // Check sub-subcategories
-          if (subCat.children) {
-            const subSubCat = subCat.children.find(subSub => subSub.id === categoryId)
-            if (subSubCat) return subSubCat.name
-          }
-        }
-      }
-    }
-    
-    // If not found, return the ID (shouldn't happen if IDs are correct)
-    console.warn(`Category ID "${categoryId}" not found in categories structure`)
+
+    const category = categoriesList.find(cat => cat.id === categoryId)
+    if (category) return category.name
+
+    const subcategory = subcategoriesList.find(sub => sub.id === categoryId)
+    if (subcategory) return subcategory.name
+
+    // If not found, assume it's already a name
     return categoryId
   }
   
@@ -552,27 +612,14 @@ export default function ProductsPage() {
   const getCategoryIdByName = (categoryName: string): string => {
     if (!categoryName) return ""
     
-    // Check main categories
-    const mainCat = categories.find(cat => cat.name === categoryName)
+    const mainCat = mainCategoriesList.find(cat => cat.name === categoryName)
     if (mainCat) return mainCat.id
     
-    // Check subcategories and sub-subcategories
-    for (const mainCat of categories) {
-      if (mainCat.children) {
-        for (const subCat of mainCat.children) {
-          // Check if this is the subcategory we're looking for
-          if (subCat.name === categoryName) {
-            return subCat.id
-          }
-          
-          // Check sub-subcategories
-          if (subCat.children) {
-            const subSubCat = subCat.children.find(subSub => subSub.name === categoryName)
-            if (subSubCat) return subSubCat.id
-          }
-        }
-      }
-    }
+    const category = categoriesList.find(cat => cat.name === categoryName)
+    if (category) return category.id
+    
+    const subcategory = subcategoriesList.find(sub => sub.name === categoryName)
+    if (subcategory) return subcategory.id
     
     return categoryName // Fallback to name if not found (might be an ID from old data)
   }
@@ -937,23 +984,15 @@ export default function ProductsPage() {
                     const colorDisplay = Array.isArray(product.color) 
                       ? product.color.join(", ") 
                       : product.color || ""
-                    // Convert category IDs to names for display (handle both old IDs and new names)
-                    // Check if it looks like an ID
-                    // Main category: single digit like "1", "2", "3"
-                    // Category: format like "1-2", "2-1"
-                    // Subcategory: format like "1-2-3", "2-2-1"
-                    const isMainCategoryId = product.mainCategory && /^\d+$/.test(product.mainCategory) && product.mainCategory.length <= 2
-                    const isCategoryId = product.category && /^\d+-\d+$/.test(product.category)
-                    const isSubcategoryId = product.subcategory && /^\d+-\d+-\d+$/.test(product.subcategory)
-                    
+                    // Convert category IDs to names for display
                     const mainCategoryDisplay = product.mainCategory 
-                      ? (isMainCategoryId ? getCategoryNameById(product.mainCategory) : product.mainCategory)
+                      ? getCategoryNameById(product.mainCategory)
                       : ""
                     const categoryDisplay = product.category 
-                      ? (isCategoryId ? getCategoryNameById(product.category) : product.category)
+                      ? getCategoryNameById(product.category)
                       : ""
                     const subcategoryDisplay = product.subcategory 
-                      ? (isSubcategoryId ? getCategoryNameById(product.subcategory) : product.subcategory)
+                      ? getCategoryNameById(product.subcategory)
                       : ""
                     return (
                       <TableRow key={product.id}>
@@ -1023,7 +1062,7 @@ export default function ProductsPage() {
                     <SelectValue placeholder="Үндсэн ангилал сонгох" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((cat) => (
+                    {mainCategoriesList.map((cat) => (
                       <SelectItem key={cat.id} value={cat.id}>
                         {cat.name}
                       </SelectItem>

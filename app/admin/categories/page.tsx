@@ -1,0 +1,1032 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+
+interface MainCategory {
+  id: string
+  name: string
+  nameEn: string
+  icon?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface Category {
+  id: string
+  name: string
+  nameEn: string
+  mainCategoryId: string
+  icon?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface Subcategory {
+  id: string
+  name: string
+  nameEn: string
+  categoryId: string
+  mainCategoryId: string
+  icon?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export default function CategoriesPage() {
+  const [activeTab, setActiveTab] = useState("main")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Filter states
+  const [categoryFilterMainCategory, setCategoryFilterMainCategory] = useState<string>("all")
+  const [subcategoryFilterMainCategory, setSubcategoryFilterMainCategory] = useState<string>("all")
+  const [subcategoryFilterCategory, setSubcategoryFilterCategory] = useState<string>("all")
+
+  // Main Categories
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
+  const [isMainDialogOpen, setIsMainDialogOpen] = useState(false)
+  const [editingMainCategory, setEditingMainCategory] = useState<MainCategory | null>(null)
+  const [mainFormData, setMainFormData] = useState({ name: "" })
+
+  // Categories
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [categoryFormData, setCategoryFormData] = useState({ name: "", mainCategoryId: "" })
+
+  // Subcategories
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([])
+  const [isSubcategoryDialogOpen, setIsSubcategoryDialogOpen] = useState(false)
+  const [editingSubcategory, setEditingSubcategory] = useState<Subcategory | null>(null)
+  const [subcategoryFormData, setSubcategoryFormData] = useState({ name: "", categoryId: "", mainCategoryId: "" })
+
+  // Fetch all data
+  const fetchMainCategories = async () => {
+    try {
+      const response = await fetch("/api/categories/main")
+      const result = await response.json()
+      if (result.success) {
+        setMainCategories(result.data)
+      } else {
+        setError(result.error || "Failed to fetch main categories")
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch main categories")
+    }
+  }
+
+  const fetchCategories = async (mainCategoryId?: string) => {
+    try {
+      const url = mainCategoryId && mainCategoryId !== "all"
+        ? `/api/categories/categories?mainCategoryId=${mainCategoryId}`
+        : "/api/categories/categories"
+      const response = await fetch(url)
+      const result = await response.json()
+      if (result.success) {
+        setCategories(result.data)
+      } else {
+        setError(result.error || "Failed to fetch categories")
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch categories")
+    }
+  }
+
+  const fetchSubcategories = async (categoryId?: string, mainCategoryId?: string) => {
+    try {
+      let url = "/api/categories/subcategories"
+      const params = new URLSearchParams()
+      if (categoryId && categoryId !== "all") {
+        params.append("categoryId", categoryId)
+      }
+      if (mainCategoryId && mainCategoryId !== "all") {
+        params.append("mainCategoryId", mainCategoryId)
+      }
+      if (params.toString()) {
+        url += `?${params.toString()}`
+      }
+      
+      const response = await fetch(url)
+      const result = await response.json()
+      if (result.success) {
+        setSubcategories(result.data)
+      } else {
+        setError(result.error || "Failed to fetch subcategories")
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch subcategories")
+    }
+  }
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true)
+      setError(null)
+      await Promise.all([
+        fetchMainCategories(),
+        fetchCategories(),
+        fetchSubcategories(),
+      ])
+      setIsLoading(false)
+    }
+    loadData()
+  }, [])
+
+  // Filter categories when main category filter changes or tab changes
+  useEffect(() => {
+    if (activeTab === "categories") {
+      const mainCategoryId = categoryFilterMainCategory !== "all" ? categoryFilterMainCategory : undefined
+      fetchCategories(mainCategoryId)
+    }
+  }, [categoryFilterMainCategory, activeTab])
+
+  // Update categories list when main category filter changes in subcategories tab (for category dropdown)
+  useEffect(() => {
+    if (activeTab === "subcategories") {
+      if (subcategoryFilterMainCategory !== "all") {
+        fetchCategories(subcategoryFilterMainCategory)
+      } else {
+        fetchCategories()
+      }
+    }
+  }, [subcategoryFilterMainCategory, activeTab])
+
+  // Filter subcategories when filters change or tab changes
+  useEffect(() => {
+    if (activeTab === "subcategories") {
+      const categoryId = subcategoryFilterCategory !== "all" ? subcategoryFilterCategory : undefined
+      const mainCategoryId = subcategoryFilterMainCategory !== "all" ? subcategoryFilterMainCategory : undefined
+      fetchSubcategories(categoryId, mainCategoryId)
+    }
+  }, [subcategoryFilterCategory, subcategoryFilterMainCategory, activeTab])
+
+  // Main Category Handlers
+  const handleOpenMainDialog = (category?: MainCategory) => {
+    if (category) {
+      setEditingMainCategory(category)
+      setMainFormData({ name: category.name })
+    } else {
+      setEditingMainCategory(null)
+      setMainFormData({ name: "" })
+    }
+    setIsMainDialogOpen(true)
+  }
+
+  const handleCloseMainDialog = () => {
+    setIsMainDialogOpen(false)
+    setEditingMainCategory(null)
+    setMainFormData({ name: "" })
+  }
+
+  const handleSubmitMainCategory = async () => {
+    try {
+      if (!mainFormData.name.trim()) {
+        alert("Name is required")
+        return
+      }
+
+      const url = editingMainCategory
+        ? `/api/categories/main/${editingMainCategory.id}`
+        : "/api/categories/main"
+      const method = editingMainCategory ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mainFormData),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        await fetchMainCategories()
+        handleCloseMainDialog()
+      } else {
+        alert(result.error || "Failed to save main category")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to save main category")
+    }
+  }
+
+  const handleDeleteMainCategory = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this main category?")) return
+
+    try {
+      const response = await fetch(`/api/categories/main/${id}`, { method: "DELETE" })
+      const result = await response.json()
+      if (result.success) {
+        await fetchMainCategories()
+        await fetchCategories() // Refresh categories in case they were filtered
+      } else {
+        alert(result.error || "Failed to delete main category")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete main category")
+    }
+  }
+
+  // Category Handlers
+  const handleOpenCategoryDialog = (category?: Category) => {
+    if (category) {
+      setEditingCategory(category)
+      setCategoryFormData({ 
+        name: category.name, 
+        mainCategoryId: category.mainCategoryId || ""
+      })
+    } else {
+      setEditingCategory(null)
+      setCategoryFormData({ name: "", mainCategoryId: "" })
+    }
+    setIsCategoryDialogOpen(true)
+  }
+
+  const handleCloseCategoryDialog = () => {
+    setIsCategoryDialogOpen(false)
+    setEditingCategory(null)
+    setCategoryFormData({ name: "", mainCategoryId: "" })
+  }
+
+  const handleSubmitCategory = async () => {
+    try {
+      if (!categoryFormData.name.trim()) {
+        alert("Name is required")
+        return
+      }
+
+      const url = editingCategory
+        ? `/api/categories/categories/${editingCategory.id}`
+        : "/api/categories/categories"
+      const method = editingCategory ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(categoryFormData),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        await fetchCategories()
+        handleCloseCategoryDialog()
+      } else {
+        alert(result.error || "Failed to save category")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to save category")
+    }
+  }
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this category?")) return
+
+    try {
+      const response = await fetch(`/api/categories/categories/${id}`, { method: "DELETE" })
+      const result = await response.json()
+      if (result.success) {
+        await fetchCategories()
+        await fetchSubcategories() // Refresh subcategories in case they were filtered
+      } else {
+        alert(result.error || "Failed to delete category")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete category")
+    }
+  }
+
+  // Subcategory Handlers
+  const handleOpenSubcategoryDialog = (subcategory?: Subcategory) => {
+    if (subcategory) {
+      setEditingSubcategory(subcategory)
+      setSubcategoryFormData({ 
+        name: subcategory.name, 
+        categoryId: subcategory.categoryId || "",
+        mainCategoryId: subcategory.mainCategoryId || ""
+      })
+    } else {
+      setEditingSubcategory(null)
+      setSubcategoryFormData({ name: "", categoryId: "", mainCategoryId: "" })
+    }
+    setIsSubcategoryDialogOpen(true)
+  }
+
+  const handleCloseSubcategoryDialog = () => {
+    setIsSubcategoryDialogOpen(false)
+    setEditingSubcategory(null)
+    setSubcategoryFormData({ name: "", categoryId: "", mainCategoryId: "" })
+  }
+
+  const handleSubmitSubcategory = async () => {
+    try {
+      if (!subcategoryFormData.name.trim()) {
+        alert("Name is required")
+        return
+      }
+
+      const url = editingSubcategory
+        ? `/api/categories/subcategories/${editingSubcategory.id}`
+        : "/api/categories/subcategories"
+      const method = editingSubcategory ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subcategoryFormData),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        await fetchSubcategories()
+        handleCloseSubcategoryDialog()
+      } else {
+        alert(result.error || "Failed to save subcategory")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to save subcategory")
+    }
+  }
+
+  const handleDeleteSubcategory = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this subcategory?")) return
+
+    try {
+      const response = await fetch(`/api/categories/subcategories/${id}`, { method: "DELETE" })
+      const result = await response.json()
+      if (result.success) {
+        await fetchSubcategories()
+      } else {
+        alert(result.error || "Failed to delete subcategory")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete subcategory")
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading categories...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-red-500">Error: {error}</p>
+      </div>
+    )
+  }
+
+  const handleMigrateCategories = async () => {
+    if (!confirm("This will migrate all static categories to Firebase. Continue?")) return;
+
+    try {
+      const response = await fetch("/api/categories/migrate", {
+        method: "POST",
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Migration successful! Migrated ${result.mainCategoriesCount} main categories.`);
+        // Refresh all data
+        await Promise.all([
+          fetchMainCategories(),
+          fetchCategories(),
+          fetchSubcategories(),
+        ]);
+      } else {
+        alert(result.error || "Failed to migrate categories");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to migrate categories");
+    }
+  }
+
+  const handleAddFirstMainCategory = async () => {
+    if (!confirm("This will add the first main category 'Хувь хүнийг хамгаалах хувцас хэрэгсэл' with all its categories and subcategories. Continue?")) return;
+
+    try {
+      // First, add the main category
+      const mainCategoryData = {
+        name: "Хувь хүнийг хамгаалах хувцас хэрэгсэл",
+      };
+
+      let mainCategoryResponse = await fetch("/api/categories/main", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mainCategoryData),
+      });
+
+      let mainCategoryResult = await mainCategoryResponse.json();
+      let mainCategoryId: string;
+
+      if (mainCategoryResult.success) {
+        mainCategoryId = mainCategoryResult.data.id;
+      } else {
+        // Try to find existing
+        const existingResponse = await fetch("/api/categories/main");
+        const existingResult = await existingResponse.json();
+        const existing = existingResult.data?.find((cat: any) => cat.name === mainCategoryData.name);
+        if (existing) {
+          mainCategoryId = existing.id;
+        } else {
+          throw new Error("Failed to create main category");
+        }
+      }
+
+      // Add categories and subcategories (matching the image exactly)
+      const categoriesData = [
+        {
+          name: "Толгой хамгаалалт",
+          mainCategoryId: mainCategoryId,
+          subcategories: [
+            "Малгай, каск",
+            "Нүүрний хамгаалалт, нүдний шил",
+            "Гагнуурын баг, дагалдах хэрэгсэлт",
+            "Чихэвч, чихний бөглөө",
+            "Амьсгал хамгаалах маск, хошуувч",
+            "Баг шүүлтүүр",
+          ],
+        },
+        {
+          name: "Хамгаалалтын хувцас",
+          mainCategoryId: mainCategoryId,
+          subcategories: [
+            "Зуны хувцас",
+            "Өвлийн хувцас",
+            "Цахилгаан, нуман ниргэлтээс хамгаалах хувцас хэрэглэл",
+            "Гагнуурын хувцас хэрэгсэл",
+          ],
+        },
+        {
+          name: "Гар хамгаалах",
+          mainCategoryId: mainCategoryId,
+          subcategories: [
+            "Ажлын бээлий",
+            "Цахилгааны бээлий",
+            "Гагнуурын бээлий",
+            "Халуунаас хамгаалах бээлий",
+            "Хими, шүлт, цагцраас хамгаалах бээлий",
+          ],
+        },
+        {
+          name: "Хөл хамгаалалт",
+          mainCategoryId: mainCategoryId,
+          subcategories: [
+            "Ажлын гутал",
+            "Гагнуурын гутал",
+            "Хүчил шүлт, цацрагаас хамгаах",
+            "Усны гутал",
+            "Цахилгаанаас хамгаалах",
+          ],
+        },
+      ];
+
+      for (const categoryData of categoriesData) {
+        // Add category
+        let categoryResponse = await fetch("/api/categories/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: categoryData.name,
+            mainCategoryId: categoryData.mainCategoryId,
+          }),
+        });
+
+        let categoryResult = await categoryResponse.json();
+        let categoryId: string;
+
+        if (categoryResult.success) {
+          categoryId = categoryResult.data.id;
+        } else {
+          // Try to find existing
+          const existingResponse = await fetch(`/api/categories/categories?mainCategoryId=${mainCategoryId}`);
+          const existingResult = await existingResponse.json();
+          const existing = existingResult.data?.find((cat: any) => cat.name === categoryData.name);
+          if (existing) {
+            categoryId = existing.id;
+          } else {
+            console.error(`Failed to create category: ${categoryData.name}`);
+            continue;
+          }
+        }
+
+        // Add subcategories
+        for (const subcategoryName of categoryData.subcategories) {
+          await fetch("/api/categories/subcategories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: subcategoryName,
+              categoryId: categoryId,
+              mainCategoryId: mainCategoryId,
+            }),
+          });
+        }
+      }
+
+      alert("First main category and all its categories/subcategories added successfully!");
+      // Refresh all data
+      await Promise.all([
+        fetchMainCategories(),
+        fetchCategories(),
+        fetchSubcategories(),
+      ]);
+    } catch (err: any) {
+      alert(err.message || "Failed to add first main category");
+    }
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Categories Management</h1>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="main">Main Categories</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="subcategories">Subcategories</TabsTrigger>
+        </TabsList>
+
+        {/* Main Categories Tab */}
+        <TabsContent value="main" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Main Categories</CardTitle>
+                  <CardDescription>Manage main categories (top level)</CardDescription>
+                </div>
+                <Button onClick={() => handleOpenMainDialog()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Main Category
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">№</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mainCategories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        No main categories found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    mainCategories.map((category, index) => (
+                      <TableRow key={category.id}>
+                        <TableCell className="text-center">{index + 1}</TableCell>
+                        <TableCell className="font-medium">{category.name}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenMainDialog(category)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteMainCategory(category.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Categories Tab */}
+        <TabsContent value="categories" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Categories</CardTitle>
+                  <CardDescription>Manage categories (second level)</CardDescription>
+                </div>
+                <Button onClick={() => handleOpenCategoryDialog()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Category
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Label className="mb-2 block">Filter by Main Category</Label>
+                <Select 
+                  value={categoryFilterMainCategory} 
+                  onValueChange={(value) => {
+                    setCategoryFilterMainCategory(value)
+                    // Immediately fetch with new filter
+                    const mainCategoryId = value !== "all" ? value : undefined
+                    fetchCategories(mainCategoryId)
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[300px]">
+                    <SelectValue placeholder="All Main Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Main Categories</SelectItem>
+                    {mainCategories.map((mainCat) => (
+                      <SelectItem key={mainCat.id} value={mainCat.id}>
+                        {mainCat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">№</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Main Category</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No categories found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    categories.map((category, index) => {
+                      const mainCat = mainCategories.find(mc => mc.id === category.mainCategoryId)
+                      return (
+                        <TableRow key={category.id}>
+                          <TableCell className="text-center">{index + 1}</TableCell>
+                          <TableCell className="font-medium">{category.name}</TableCell>
+                          <TableCell>{mainCat?.name || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenCategoryDialog(category)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteCategory(category.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Subcategories Tab */}
+        <TabsContent value="subcategories" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Subcategories</CardTitle>
+                  <CardDescription>Manage subcategories (third level)</CardDescription>
+                </div>
+                <Button onClick={() => handleOpenSubcategoryDialog()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Subcategory
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 space-y-4">
+                <div>
+                  <Label className="mb-2 block">Filter by Main Category</Label>
+                  <Select 
+                    value={subcategoryFilterMainCategory} 
+                    onValueChange={(value) => {
+                      setSubcategoryFilterMainCategory(value)
+                      setSubcategoryFilterCategory("all") // Reset category filter
+                      // Update categories list for the dropdown
+                      if (value !== "all") {
+                        fetchCategories(value)
+                      } else {
+                        fetchCategories()
+                      }
+                      // Fetch subcategories with new filter
+                      const mainCategoryId = value !== "all" ? value : undefined
+                      fetchSubcategories(undefined, mainCategoryId)
+                    }}
+                  >
+                    <SelectTrigger className="w-full sm:w-[300px]">
+                      <SelectValue placeholder="All Main Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Main Categories</SelectItem>
+                      {mainCategories.map((mainCat) => (
+                        <SelectItem key={mainCat.id} value={mainCat.id}>
+                          {mainCat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-2 block">Filter by Category</Label>
+                  <Select 
+                    value={subcategoryFilterCategory} 
+                    onValueChange={(value) => {
+                      setSubcategoryFilterCategory(value)
+                      // Immediately fetch with new filter
+                      const categoryId = value !== "all" ? value : undefined
+                      const mainCategoryId = subcategoryFilterMainCategory !== "all" ? subcategoryFilterMainCategory : undefined
+                      fetchSubcategories(categoryId, mainCategoryId)
+                    }}
+                    disabled={subcategoryFilterMainCategory === "all"}
+                  >
+                    <SelectTrigger className="w-full sm:w-[300px]">
+                      <SelectValue placeholder={subcategoryFilterMainCategory === "all" ? "Select main category first" : "All Categories"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories
+                        .filter(cat => subcategoryFilterMainCategory === "all" || cat.mainCategoryId === subcategoryFilterMainCategory)
+                        .map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">№</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Main Category</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subcategories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No subcategories found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    subcategories.map((subcategory, index) => {
+                      const cat = categories.find(c => c.id === subcategory.categoryId)
+                      const mainCat = mainCategories.find(mc => mc.id === subcategory.mainCategoryId)
+                      return (
+                        <TableRow key={subcategory.id}>
+                          <TableCell className="text-center">{index + 1}</TableCell>
+                          <TableCell className="font-medium">{subcategory.name}</TableCell>
+                          <TableCell>{cat?.name || "-"}</TableCell>
+                          <TableCell>{mainCat?.name || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenSubcategoryDialog(subcategory)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteSubcategory(subcategory.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Main Category Dialog */}
+      <Dialog open={isMainDialogOpen} onOpenChange={setIsMainDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingMainCategory ? "Edit Main Category" : "Add Main Category"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingMainCategory ? "Update main category details" : "Create a new main category"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={mainFormData.name}
+                onChange={(e) => setMainFormData({ ...mainFormData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseMainDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitMainCategory}>
+              {editingMainCategory ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Dialog */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? "Edit Category" : "Add Category"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory ? "Update category details" : "Create a new category"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={categoryFormData.name}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+            <div>
+              <Label>Main Category *</Label>
+              <Select
+                value={categoryFormData.mainCategoryId}
+                onValueChange={(value) => setCategoryFormData({ ...categoryFormData, mainCategoryId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select main category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mainCategories.map((mainCat) => (
+                    <SelectItem key={mainCat.id} value={mainCat.id}>
+                      {mainCat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseCategoryDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitCategory}>
+              {editingCategory ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Subcategory Dialog */}
+      <Dialog open={isSubcategoryDialogOpen} onOpenChange={setIsSubcategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingSubcategory ? "Edit Subcategory" : "Add Subcategory"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingSubcategory ? "Update subcategory details" : "Create a new subcategory"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={subcategoryFormData.name}
+                onChange={(e) => setSubcategoryFormData({ ...subcategoryFormData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+            <div>
+              <Label>Main Category *</Label>
+              <Select
+                value={subcategoryFormData.mainCategoryId}
+                onValueChange={async (value) => {
+                  setSubcategoryFormData({ ...subcategoryFormData, mainCategoryId: value, categoryId: "" })
+                  // Refresh categories for the selected main category
+                  await fetchCategories(value)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select main category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mainCategories.map((mainCat) => (
+                    <SelectItem key={mainCat.id} value={mainCat.id}>
+                      {mainCat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Category *</Label>
+              <Select
+                value={subcategoryFormData.categoryId}
+                onValueChange={(value) => setSubcategoryFormData({ ...subcategoryFormData, categoryId: value })}
+                disabled={!subcategoryFormData.mainCategoryId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={subcategoryFormData.mainCategoryId ? "Select category" : "Select main category first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {subcategoryFormData.mainCategoryId ? (
+                    categories
+                      .filter(cat => cat.mainCategoryId === subcategoryFormData.mainCategoryId)
+                      .map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))
+                  ) : (
+                    <SelectItem value="placeholder" disabled>Select main category first</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseSubcategoryDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitSubcategory}>
+              {editingSubcategory ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
