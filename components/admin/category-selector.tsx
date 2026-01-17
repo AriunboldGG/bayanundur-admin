@@ -216,7 +216,7 @@ export function CategorySelector({ value, onValueChange }: CategorySelectorProps
                       </div>
 
                       {/* Show sub-subcategories */}
-                      {subCategory.children?.map((subSubCategory) => {
+                      {subCategory.children?.map((subSubCategory: any) => {
                         const isSubSelected = value === subSubCategory.id
                         return (
                           <div
