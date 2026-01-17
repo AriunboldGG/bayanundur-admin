@@ -786,9 +786,6 @@ export default function CategoriesPage() {
                   value={categoryFilterMainCategory} 
                   onValueChange={(value) => {
                     setCategoryFilterMainCategory(value)
-                    // Immediately fetch with new filter
-                    const mainCategoryId = value !== "all" ? value : undefined
-                    fetchCategories(mainCategoryId)
                   }}
                 >
                   <SelectTrigger className="w-full sm:w-[300px]">
