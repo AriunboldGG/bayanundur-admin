@@ -69,6 +69,9 @@ interface ProductSector {
   updatedAt?: string
 }
 
+const buildCategoryId = (mainCategoryId: string, name: string) => `${mainCategoryId}::${name}`
+const parseCategoryName = (categoryId: string) => categoryId.split("::").slice(1).join("::") || categoryId
+
 export default function CategoriesPage() {
   const [activeTab, setActiveTab] = useState("main")
   const [isLoading, setIsLoading] = useState(true)
@@ -118,47 +121,34 @@ export default function CategoriesPage() {
     }
   }
 
-  const fetchCategories = async (mainCategoryId?: string) => {
-    try {
-      const url = mainCategoryId && mainCategoryId !== "all"
-        ? `/api/categories/categories?mainCategoryId=${mainCategoryId}`
-        : "/api/categories/categories"
-      const response = await fetch(url)
-      const result = await response.json()
-      if (result.success) {
-        setCategories(result.data)
-      } else {
-        setError(result.error || "Failed to fetch categories")
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch categories")
-    }
-  }
-
-  const fetchSubcategories = async (categoryId?: string, mainCategoryId?: string) => {
-    try {
-      let url = "/api/categories/subcategories"
-      const params = new URLSearchParams()
-      if (categoryId && categoryId !== "all") {
-        params.append("categoryId", categoryId)
-      }
-      if (mainCategoryId && mainCategoryId !== "all") {
-        params.append("mainCategoryId", mainCategoryId)
-      }
-      if (params.toString()) {
-        url += `?${params.toString()}`
-      }
-      
-      const response = await fetch(url)
-      const result = await response.json()
-      if (result.success) {
-        setSubcategories(result.data)
-      } else {
-        setError(result.error || "Failed to fetch subcategories")
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch subcategories")
-    }
+  const buildDerivedCategories = (mainList: MainCategory[]) => {
+    const derivedCategories: Category[] = []
+    const derivedSubcategories: Subcategory[] = []
+    mainList.forEach((main) => {
+      const children = Array.isArray((main as any).children) ? (main as any).children : []
+      children.forEach((childName: string) => {
+        const categoryId = buildCategoryId(main.id, childName)
+        derivedCategories.push({
+          id: categoryId,
+          name: childName,
+          nameEn: "",
+          mainCategoryId: main.id,
+        })
+        const subchildrenMap = (main as any).subchildren || {}
+        const subchildren = Array.isArray(subchildrenMap?.[childName]) ? subchildrenMap[childName] : []
+        subchildren.forEach((subName: string) => {
+          derivedSubcategories.push({
+            id: buildCategoryId(main.id, `${childName}::${subName}`),
+            name: subName,
+            nameEn: "",
+            categoryId,
+            mainCategoryId: main.id,
+          })
+        })
+      })
+    })
+    setCategories(derivedCategories)
+    setSubcategories(derivedSubcategories)
   }
 
   const fetchProductSectors = async () => {
@@ -181,8 +171,6 @@ export default function CategoriesPage() {
       setError(null)
       await Promise.all([
         fetchMainCategories(),
-        fetchCategories(),
-        fetchSubcategories(),
         fetchProductSectors(),
       ])
       setIsLoading(false)
@@ -190,33 +178,9 @@ export default function CategoriesPage() {
     loadData()
   }, [])
 
-  // Filter categories when main category filter changes or tab changes
   useEffect(() => {
-    if (activeTab === "categories") {
-      const mainCategoryId = categoryFilterMainCategory !== "all" ? categoryFilterMainCategory : undefined
-      fetchCategories(mainCategoryId)
-    }
-  }, [categoryFilterMainCategory, activeTab])
-
-  // Update categories list when main category filter changes in subcategories tab (for category dropdown)
-  useEffect(() => {
-    if (activeTab === "subcategories") {
-      if (subcategoryFilterMainCategory !== "all") {
-        fetchCategories(subcategoryFilterMainCategory)
-      } else {
-        fetchCategories()
-      }
-    }
-  }, [subcategoryFilterMainCategory, activeTab])
-
-  // Filter subcategories when filters change or tab changes
-  useEffect(() => {
-    if (activeTab === "subcategories") {
-      const categoryId = subcategoryFilterCategory !== "all" ? subcategoryFilterCategory : undefined
-      const mainCategoryId = subcategoryFilterMainCategory !== "all" ? subcategoryFilterMainCategory : undefined
-      fetchSubcategories(categoryId, mainCategoryId)
-    }
-  }, [subcategoryFilterCategory, subcategoryFilterMainCategory, activeTab])
+    buildDerivedCategories(mainCategories)
+  }, [mainCategories])
 
   // Refresh product sectors when tab opens
   useEffect(() => {
@@ -281,7 +245,6 @@ export default function CategoriesPage() {
       const result = await response.json()
       if (result.success) {
         await fetchMainCategories()
-        await fetchCategories() // Refresh categories in case they were filtered
       } else {
         alert(result.error || "Failed to delete main category")
       }
@@ -318,24 +281,44 @@ export default function CategoriesPage() {
         return
       }
 
-      const url = editingCategory
-        ? `/api/categories/categories/${editingCategory.id}`
-        : "/api/categories/categories"
-      const method = editingCategory ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(categoryFormData),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        await fetchCategories()
-        handleCloseCategoryDialog()
-      } else {
-        alert(result.error || "Failed to save category")
+      const mainCategoryId = categoryFormData.mainCategoryId
+      if (!mainCategoryId) {
+        alert("Main category is required")
+        return
       }
+
+      if (editingCategory) {
+        const oldName = editingCategory.name
+        const newName = categoryFormData.name.trim()
+        const oldMainCategoryId = editingCategory.mainCategoryId || ""
+        if (oldMainCategoryId && oldMainCategoryId !== mainCategoryId) {
+          await fetch(`/api/categories/main/${oldMainCategoryId}/children`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: oldName }),
+          })
+          await fetch(`/api/categories/main/${mainCategoryId}/children`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: newName }),
+          })
+        } else if (oldName !== newName) {
+          await fetch(`/api/categories/main/${mainCategoryId}/children`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ oldName, newName }),
+          })
+        }
+      } else {
+        await fetch(`/api/categories/main/${mainCategoryId}/children`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: categoryFormData.name.trim() }),
+        })
+      }
+
+      await fetchMainCategories()
+      handleCloseCategoryDialog()
     } catch (err: any) {
       alert(err.message || "Failed to save category")
     }
@@ -345,14 +328,22 @@ export default function CategoriesPage() {
     if (!confirm("Are you sure you want to delete this category?")) return
 
     try {
-      const response = await fetch(`/api/categories/categories/${id}`, { method: "DELETE" })
-      const result = await response.json()
-      if (result.success) {
-        await fetchCategories()
-        await fetchSubcategories() // Refresh subcategories in case they were filtered
-      } else {
-        alert(result.error || "Failed to delete category")
+      const category = categories.find(cat => cat.id === id)
+      if (!category?.mainCategoryId) {
+        alert("Missing main category")
+        return
       }
+      const response = await fetch(`/api/categories/main/${category.mainCategoryId}/children`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: category.name }),
+      })
+      const result = await response.json()
+      if (!result.success) {
+        alert(result.error || "Failed to delete category")
+        return
+      }
+      await fetchMainCategories()
     } catch (err: any) {
       alert(err.message || "Failed to delete category")
     }
@@ -387,24 +378,53 @@ export default function CategoriesPage() {
         return
       }
 
-      const url = editingSubcategory
-        ? `/api/categories/subcategories/${editingSubcategory.id}`
-        : "/api/categories/subcategories"
-      const method = editingSubcategory ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subcategoryFormData),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        await fetchSubcategories()
-        handleCloseSubcategoryDialog()
-      } else {
-        alert(result.error || "Failed to save subcategory")
+      const mainCategoryId = subcategoryFormData.mainCategoryId
+      if (!mainCategoryId || !subcategoryFormData.categoryId) {
+        alert("Main category and category are required")
+        return
       }
+
+      const categoryName = parseCategoryName(subcategoryFormData.categoryId)
+      const subcategoryName = subcategoryFormData.name.trim()
+
+      if (editingSubcategory) {
+        const oldCategoryName = parseCategoryName(editingSubcategory.categoryId || "")
+        const oldName = editingSubcategory.name
+        const oldMainCategoryId = editingSubcategory.mainCategoryId || ""
+
+        if (oldMainCategoryId && oldMainCategoryId !== mainCategoryId) {
+          await fetch(`/api/categories/main/${oldMainCategoryId}/subchildren`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ categoryName: oldCategoryName, subcategoryName: oldName }),
+          })
+          await fetch(`/api/categories/main/${mainCategoryId}/subchildren`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ categoryName, subcategoryName }),
+          })
+        } else {
+          await fetch(`/api/categories/main/${mainCategoryId}/subchildren`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              oldCategoryName,
+              newCategoryName: categoryName,
+              oldName,
+              newName: subcategoryName,
+            }),
+          })
+        }
+      } else {
+        await fetch(`/api/categories/main/${mainCategoryId}/subchildren`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryName, subcategoryName }),
+        })
+      }
+
+      await fetchMainCategories()
+      handleCloseSubcategoryDialog()
     } catch (err: any) {
       alert(err.message || "Failed to save subcategory")
     }
@@ -414,13 +434,23 @@ export default function CategoriesPage() {
     if (!confirm("Are you sure you want to delete this subcategory?")) return
 
     try {
-      const response = await fetch(`/api/categories/subcategories/${id}`, { method: "DELETE" })
-      const result = await response.json()
-      if (result.success) {
-        await fetchSubcategories()
-      } else {
-        alert(result.error || "Failed to delete subcategory")
+      const subcategory = subcategories.find(sub => sub.id === id)
+      if (!subcategory?.mainCategoryId || !subcategory.categoryId) {
+        alert("Missing main category or category")
+        return
       }
+      const categoryName = parseCategoryName(subcategory.categoryId)
+      const response = await fetch(`/api/categories/main/${subcategory.mainCategoryId}/subchildren`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryName, subcategoryName: subcategory.name }),
+      })
+      const result = await response.json()
+      if (!result.success) {
+        alert(result.error || "Failed to delete subcategory")
+        return
+      }
+      await fetchMainCategories()
     } catch (err: any) {
       alert(err.message || "Failed to delete subcategory")
     }
@@ -506,10 +536,10 @@ export default function CategoriesPage() {
   }
 
   const handleMigrateCategories = async () => {
-    if (!confirm("This will migrate all static categories to Firebase. Continue?")) return;
+    if (!confirm("This will migrate categories into main_categories. Continue?")) return;
 
     try {
-      const response = await fetch("/api/categories/migrate", {
+      const response = await fetch("/api/categories/migrate-to-main", {
         method: "POST",
       });
       const result = await response.json();
@@ -1136,10 +1166,8 @@ export default function CategoriesPage() {
               <Label>Main Category *</Label>
               <Select
                 value={subcategoryFormData.mainCategoryId}
-                onValueChange={async (value) => {
+                onValueChange={(value) => {
                   setSubcategoryFormData({ ...subcategoryFormData, mainCategoryId: value, categoryId: "" })
-                  // Refresh categories for the selected main category
-                  await fetchCategories(value)
                 }}
               >
                 <SelectTrigger>

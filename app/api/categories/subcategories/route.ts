@@ -93,6 +93,19 @@ export async function POST(request: NextRequest) {
           children: admin.firestore.FieldValue.arrayUnion(subcategoryData.name),
           updatedAt: new Date().toISOString(),
         });
+
+      const categoryDoc = await db.collection("categories").doc(subcategoryData.categoryId).get();
+      const categoryData = categoryDoc.exists ? categoryDoc.data() : null;
+      const mainCategoryId = categoryData?.mainCategoryId || "";
+      if (mainCategoryId) {
+        await db
+          .collection("main_categories")
+          .doc(mainCategoryId)
+          .update({
+            [`subchildren.${subcategoryData.categoryId}`]: admin.firestore.FieldValue.arrayUnion(subcategoryData.name),
+            updatedAt: new Date().toISOString(),
+          });
+      }
     }
 
     return NextResponse.json({

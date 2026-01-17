@@ -3,7 +3,8 @@ import { db } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 
 type DecrementItem = {
-  productId: string;
+  productId?: string;
+  productCode?: string;
   quantity: number;
 };
 
@@ -19,9 +20,10 @@ export async function POST(request: NextRequest) {
     const normalizedItems = items
       .map((item) => ({
         productId: String(item.productId || "").trim(),
+        productCode: String(item.productCode || "").trim(),
         quantity: Number(item.quantity || 0),
       }))
-      .filter((item) => item.productId && item.quantity > 0);
+      .filter((item) => (item.productId || item.productCode) && item.quantity > 0);
 
     if (normalizedItems.length === 0) {
       return NextResponse.json(
@@ -32,13 +34,34 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString();
 
+    const missing: string[] = [];
+    let updatedCount = 0;
+
     await db.runTransaction(async (transaction) => {
       for (const item of normalizedItems) {
-        const productRef = db.collection("products").doc(item.productId);
-        const productSnap = await transaction.get(productRef);
+        let productRef = null as any;
+        let productSnap = null as any;
 
-        if (!productSnap.exists) {
-          throw new Error(`Product not found: ${item.productId}`);
+        if (item.productId) {
+          productRef = db.collection("products").doc(item.productId);
+          productSnap = await transaction.get(productRef);
+        }
+
+        if ((!productSnap || !productSnap.exists) && item.productCode) {
+          const querySnap = await db
+            .collection("products")
+            .where("product_code", "==", item.productCode)
+            .limit(1)
+            .get();
+          if (!querySnap.empty) {
+            productRef = querySnap.docs[0].ref;
+            productSnap = querySnap.docs[0];
+          }
+        }
+
+        if (!productSnap || !productSnap.exists) {
+          missing.push(item.productId || item.productCode || "unknown");
+          continue;
         }
 
         const data = productSnap.data() || {};
@@ -49,10 +72,15 @@ export async function POST(request: NextRequest) {
           stock: nextStock,
           updatedAt: now,
         });
+        updatedCount += 1;
       }
     });
 
-    return NextResponse.json({ success: true, count: normalizedItems.length });
+    return NextResponse.json({
+      success: true,
+      count: updatedCount,
+      missing,
+    });
   } catch (error: any) {
     console.error("[Products API] Error decrementing stock:", error);
     return NextResponse.json(

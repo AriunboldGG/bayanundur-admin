@@ -93,6 +93,35 @@ export async function PUT(
         });
     }
 
+    const oldCategoryDoc = oldCategoryId
+      ? await db.collection("categories").doc(oldCategoryId).get()
+      : null;
+    const newCategoryDoc = newCategoryId
+      ? await db.collection("categories").doc(newCategoryId).get()
+      : null;
+    const oldMainCategoryId = oldCategoryDoc?.exists ? oldCategoryDoc.data()?.mainCategoryId || "" : "";
+    const newMainCategoryId = newCategoryDoc?.exists ? newCategoryDoc.data()?.mainCategoryId || "" : "";
+
+    if (oldMainCategoryId && (oldMainCategoryId !== newMainCategoryId || oldName !== newName)) {
+      await db
+        .collection("main_categories")
+        .doc(oldMainCategoryId)
+        .update({
+          [`subchildren.${oldCategoryId}`]: admin.firestore.FieldValue.arrayRemove(oldName),
+          updatedAt: new Date().toISOString(),
+        });
+    }
+
+    if (newMainCategoryId) {
+      await db
+        .collection("main_categories")
+        .doc(newMainCategoryId)
+        .update({
+          [`subchildren.${newCategoryId}`]: admin.firestore.FieldValue.arrayUnion(newName),
+          updatedAt: new Date().toISOString(),
+        });
+    }
+
     const updatedDoc = await db.collection("subcategories").doc(id).get();
 
     return NextResponse.json({
@@ -137,6 +166,18 @@ export async function DELETE(
           children: admin.firestore.FieldValue.arrayRemove(existingData.name),
           updatedAt: new Date().toISOString(),
         });
+
+      const categoryDoc = await db.collection("categories").doc(existingData.categoryId).get();
+      const mainCategoryId = categoryDoc.exists ? categoryDoc.data()?.mainCategoryId || "" : "";
+      if (mainCategoryId) {
+        await db
+          .collection("main_categories")
+          .doc(mainCategoryId)
+          .update({
+            [`subchildren.${existingData.categoryId}`]: admin.firestore.FieldValue.arrayRemove(existingData.name),
+            updatedAt: new Date().toISOString(),
+          });
+      }
     }
 
     return NextResponse.json({

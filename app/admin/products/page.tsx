@@ -79,6 +79,9 @@ interface SubcategoryItem {
   mainCategoryId?: string
 }
 
+const buildCategoryId = (mainCategoryId: string, name: string) => `${mainCategoryId}::${name}`
+const parseCategoryName = (categoryId: string) => categoryId.split("::").slice(1).join("::") || categoryId
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -228,28 +231,36 @@ export default function ProductsPage() {
 
   const fetchAllCategories = async () => {
     try {
-      const [mainResponse, categoriesResponse, subcategoriesResponse] = await Promise.all([
-        fetch("/api/categories/main"),
-        fetch("/api/categories/categories"),
-        fetch("/api/categories/subcategories"),
-      ])
-
-      const [mainResult, categoriesResult, subcategoriesResult] = await Promise.all([
-        mainResponse.json(),
-        categoriesResponse.json(),
-        subcategoriesResponse.json(),
-      ])
+      const mainResponse = await fetch("/api/categories/main")
+      const mainResult = await mainResponse.json()
 
       if (mainResult.success) {
         setMainCategoriesList(mainResult.data)
-      }
-
-      if (categoriesResult.success) {
-        setCategoriesList(categoriesResult.data)
-      }
-
-      if (subcategoriesResult.success) {
-        setSubcategoriesList(subcategoriesResult.data)
+        const derivedCategories: CategoryItem[] = []
+        const derivedSubcategories: SubcategoryItem[] = []
+        mainResult.data.forEach((main: any) => {
+          const children = Array.isArray(main.children) ? main.children : []
+          children.forEach((childName: string) => {
+            const categoryId = buildCategoryId(main.id, childName)
+            derivedCategories.push({
+              id: categoryId,
+              name: childName,
+              mainCategoryId: main.id,
+            })
+            const subchildrenMap = main.subchildren || {}
+            const subchildren = Array.isArray(subchildrenMap?.[childName]) ? subchildrenMap[childName] : []
+            subchildren.forEach((subName: string) => {
+              derivedSubcategories.push({
+                id: buildCategoryId(main.id, `${childName}::${subName}`),
+                name: subName,
+                categoryId,
+                mainCategoryId: main.id,
+              })
+            })
+          })
+        })
+        setCategoriesList(derivedCategories)
+        setSubcategoriesList(derivedSubcategories)
       }
     } catch (err) {
       console.error("Error fetching categories:", err)
@@ -656,8 +667,8 @@ export default function ProductsPage() {
     const subcategory = subcategoriesList.find(sub => sub.id === categoryId)
     if (subcategory) return subcategory.name
 
-    // If not found, assume it's already a name
-    return categoryId
+    // If not found, attempt to parse name from composite ID
+    return parseCategoryName(categoryId)
   }
   
   // Helper function to find category ID by name (for loading existing products)

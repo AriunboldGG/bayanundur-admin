@@ -9,7 +9,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { categories, getCategoryPath } from "@/lib/categories"
 import { Shield, Wrench, Settings } from "lucide-react"
 
 interface CategorySelectorProps {
@@ -26,6 +25,58 @@ const iconMap: Record<string, React.ReactNode> = {
 export function CategorySelector({ value, onValueChange }: CategorySelectorProps) {
   const [open, setOpen] = React.useState(false)
   const [selectedMainCategory, setSelectedMainCategory] = React.useState<string | null>(null)
+  const [categories, setCategories] = React.useState<any[]>([])
+
+  React.useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch("/api/categories/main")
+        const result = await response.json()
+        if (result.success) {
+          const built = (result.data || []).map((main: any) => {
+            const children = Array.isArray(main.children) ? main.children : []
+            const subchildren = main.subchildren || {}
+            return {
+              ...main,
+              children: children.map((childName: string) => ({
+                id: `${main.id}::${childName}`,
+                name: childName,
+                children: (Array.isArray(subchildren?.[childName]) ? subchildren[childName] : []).map((subName: string) => ({
+                  id: `${main.id}::${childName}::${subName}`,
+                  name: subName,
+                })),
+              })),
+            }
+          })
+          setCategories(built)
+        }
+      } catch (error) {
+        console.error("Failed to load categories:", error)
+      }
+    }
+    fetchCategories()
+  }, [])
+
+  const getCategoryPath = (categoryId: string): string => {
+    if (!categoryId) return ""
+    for (const mainCat of categories) {
+      if (mainCat.id === categoryId) return mainCat.name
+      if (mainCat.children) {
+        for (const subCat of mainCat.children) {
+          if (subCat.id === categoryId) return `${mainCat.name} > ${subCat.name}`
+          if (subCat.children) {
+            for (const subSubCat of subCat.children) {
+              if (subSubCat.id === categoryId) {
+                return `${mainCat.name} > ${subCat.name} > ${subSubCat.name}`
+              }
+            }
+          }
+        }
+      }
+    }
+    return categoryId
+  }
+
   const selectedCategoryPath = value ? getCategoryPath(value) : ""
 
   // Find which main category the selected value belongs to

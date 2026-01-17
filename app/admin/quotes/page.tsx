@@ -609,6 +609,14 @@ export default function QuotesPage() {
     return key ? String(key) : ""
   }
 
+  const toNumber = (value: any): number => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0
+    }
+    const parsed = parseFloat(String(value))
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
   const handleProductStatusChange = async (
     quoteId: string,
     productId: string,
@@ -2254,10 +2262,11 @@ export default function QuotesPage() {
                           .filter((product, index) => selectedForSendOffer.has(getProductKey(product, index)))
                           .map((product, index) => {
                             const productId = getProductKey(product, index)
-                            const unitPrice = (product as any).price || (product as any).priceNum || 0
-                            const quantity = sendOfferQuantities[productId] !== undefined 
+                            const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                            const rawQuantity = sendOfferQuantities[productId] !== undefined 
                               ? sendOfferQuantities[productId] 
-                              : (product.quantity || 0)
+                              : product.quantity
+                            const quantity = toNumber(rawQuantity)
                             const total = unitPrice * quantity
                             const productCode = (product as any).product_code || (product as any).productCode || ""
                             const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
@@ -2599,12 +2608,13 @@ export default function QuotesPage() {
                           .filter((product, index) => selectedForInvoice.has(getProductKey(product, index)))
                           .map((product, index) => {
                             const productId = getProductKey(product, index)
-                            const fallbackPrice = (product as any).price || (product as any).priceNum || 0
-                            const unitPrice = invoicePrices[productId] || String(fallbackPrice)
-                            const quantity = invoiceQuantities[productId] !== undefined 
+                            const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                            const unitPrice = invoicePrices[productId] ?? String(fallbackPrice)
+                            const rawQuantity = invoiceQuantities[productId] !== undefined 
                               ? invoiceQuantities[productId] 
-                              : (product.quantity || 0)
-                            const total = (parseFloat(unitPrice) || 0) * quantity
+                              : product.quantity
+                            const quantity = toNumber(rawQuantity)
+                            const total = toNumber(unitPrice) * quantity
                             const productCode = (product as any).product_code || (product as any).productCode || ""
                             const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
                             const deliveryTime = invoiceDeliveryTimes[productId] !== undefined
@@ -3008,12 +3018,13 @@ export default function QuotesPage() {
                           .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
                           .map((product, index) => {
                             const productId = getProductKey(product, index)
-                            const fallbackPrice = (product as any).price || (product as any).priceNum || 0
-                            const unitPrice = spentPrices[productId] || String(fallbackPrice)
-                            const quantity = spentQuantities[productId] !== undefined 
+                            const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                            const unitPrice = spentPrices[productId] ?? String(fallbackPrice)
+                            const rawQuantity = spentQuantities[productId] !== undefined 
                               ? spentQuantities[productId] 
-                              : (product.quantity || 0)
-                            const total = (parseFloat(unitPrice) || 0) * quantity
+                              : product.quantity
+                            const quantity = toNumber(rawQuantity)
+                            const total = toNumber(unitPrice) * quantity
                             const productCode = (product as any).product_code || (product as any).productCode || ""
                             const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
                             const deliveryTime = spentDeliveryTimes[productId] !== undefined
@@ -3262,14 +3273,31 @@ export default function QuotesPage() {
                         return statusValue !== "spent"
                       })
                       .map((product, index) => {
-                        const productId = (product as any).productId || (product as any).id || ""
-                        const resolvedId = String(productId).trim()
+                        const rawId =
+                          (product as any).productId ||
+                          (product as any).product_id ||
+                          (product as any).id ||
+                          ""
+                        const resolvedId = String(rawId).trim()
+                        const productCode =
+                          (product as any).product_code ||
+                          (product as any).productCode ||
+                          ""
                         const quantity = spentQuantities[getProductKey(product, index)] !== undefined
                           ? spentQuantities[getProductKey(product, index)]
                           : (product as any).quantity || 0
-                        return { productId: resolvedId, quantity: Number(quantity) || 0 }
+                        return {
+                          productId: resolvedId,
+                          productCode: String(productCode).trim(),
+                          quantity: Number(quantity) || 0,
+                        }
                       })
-                      .filter((item) => item.productId && item.quantity > 0)
+                      .filter(
+                        (item) =>
+                          (item.productId || item.productCode) &&
+                          (!item.productId || !item.productId.startsWith("product-")) &&
+                          item.quantity > 0
+                      )
 
                     if (itemsToDecrement.length > 0) {
                       const stockResponse = await fetch("/api/products/decrement-stock", {
@@ -3280,6 +3308,9 @@ export default function QuotesPage() {
                       const stockResult = await stockResponse.json()
                       if (!stockResult.success) {
                         throw new Error(stockResult.error || "Failed to update product stock")
+                      }
+                      if (stockResult.missing && stockResult.missing.length > 0) {
+                        console.warn("Missing products for stock update:", stockResult.missing)
                       }
                     }
 
