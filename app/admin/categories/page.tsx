@@ -680,12 +680,8 @@ export default function CategoriesPage() {
       }
 
       alert("First main category and all its categories/subcategories added successfully!");
-      // Refresh all data
-      await Promise.all([
-        fetchMainCategories(),
-        fetchCategories(),
-        fetchSubcategories(),
-      ]);
+      // Refresh main categories only
+      await fetchMainCategories();
     } catch (err: any) {
       alert(err.message || "Failed to add first main category");
     }
