@@ -878,9 +878,7 @@ export default function CategoriesPage() {
                       setSubcategoryFilterMainCategory(value)
                       setSubcategoryFilterCategory("all") // Reset category filter
                     // Categories are derived from main_categories now
-                      // Fetch subcategories with new filter
-                      const mainCategoryId = value !== "all" ? value : undefined
-                      fetchSubcategories(undefined, mainCategoryId)
+                    // Subcategories are derived from main_categories now
                     }}
                   >
                     <SelectTrigger className="w-full sm:w-[300px]">
