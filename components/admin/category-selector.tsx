@@ -197,7 +197,7 @@ export function CategorySelector({ value, onValueChange }: CategorySelectorProps
                 )}
 
                 {/* Show subcategories */}
-                {selectedMainCategoryData.children?.map((subCategory) => {
+                {selectedMainCategoryData.children?.map((subCategory: any) => {
                   const isSelected = value === subCategory.id
                   const hasChildren = subCategory.children && subCategory.children.length > 0
                   

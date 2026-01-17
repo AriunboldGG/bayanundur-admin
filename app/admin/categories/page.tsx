@@ -182,6 +182,16 @@ export default function CategoriesPage() {
     buildDerivedCategories(mainCategories)
   }, [mainCategories])
 
+  const filteredSubcategories = subcategories.filter((subcategory) => {
+    const matchesMain =
+      subcategoryFilterMainCategory === "all" ||
+      subcategory.mainCategoryId === subcategoryFilterMainCategory
+    const matchesCategory =
+      subcategoryFilterCategory === "all" ||
+      subcategory.categoryId === subcategoryFilterCategory
+    return matchesMain && matchesCategory
+  })
+
   // Refresh product sectors when tab opens
   useEffect(() => {
     if (activeTab === "sectors") {
@@ -932,14 +942,14 @@ export default function CategoriesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {subcategories.length === 0 ? (
+                  {filteredSubcategories.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">
                         No subcategories found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    subcategories.map((subcategory, index) => {
+                    filteredSubcategories.map((subcategory, index) => {
                       const cat = categories.find(c => c.id === subcategory.categoryId)
                       const mainCat = mainCategories.find(mc => mc.id === subcategory.mainCategoryId)
                       return (
