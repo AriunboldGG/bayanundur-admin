@@ -901,9 +901,7 @@ export default function CategoriesPage() {
                     onValueChange={(value) => {
                       setSubcategoryFilterCategory(value)
                       // Immediately fetch with new filter
-                      const categoryId = value !== "all" ? value : undefined
-                      const mainCategoryId = subcategoryFilterMainCategory !== "all" ? subcategoryFilterMainCategory : undefined
-                      fetchSubcategories(categoryId, mainCategoryId)
+                      // Subcategories are derived from main_categories now
                     }}
                     disabled={subcategoryFilterMainCategory === "all"}
                   >
