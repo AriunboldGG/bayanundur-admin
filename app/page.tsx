@@ -234,7 +234,7 @@ export default function LoginPage() {
                   }}
                   disabled={isResetting}
                 >
-                  Cancel
+                  Хаах
                 </Button>
                 <Button type="submit" disabled={isResetting}>
                   {isResetting ? "Sending..." : "Send Reset Link"}

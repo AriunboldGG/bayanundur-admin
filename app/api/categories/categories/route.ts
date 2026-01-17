@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase-admin";
+import admin from "firebase-admin";
 
 // GET - Fetch all categories (with optional mainCategory filter)
 export async function GET(request: NextRequest) {
@@ -77,6 +78,16 @@ export async function POST(request: NextRequest) {
     };
 
     const docRef = await db.collection("categories").add(categoryData);
+
+    if (categoryData.mainCategoryId) {
+      await db
+        .collection("main_categories")
+        .doc(categoryData.mainCategoryId)
+        .update({
+          children: admin.firestore.FieldValue.arrayUnion(categoryData.name),
+          updatedAt: new Date().toISOString(),
+        });
+    }
 
     return NextResponse.json({
       success: true,

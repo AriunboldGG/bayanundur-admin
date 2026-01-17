@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase-admin";
+import admin from "firebase-admin";
 
 // GET - Fetch a single subcategory
 export async function GET(
@@ -53,6 +54,8 @@ export async function PUT(
     }
 
     const data = await request.json();
+    const existingDoc = await db.collection("subcategories").doc(id).get();
+    const existingData = existingDoc.exists ? existingDoc.data() : null;
     
     const updateData: any = {
       updatedAt: new Date().toISOString(),
@@ -64,6 +67,31 @@ export async function PUT(
     if (data.mainCategoryId !== undefined) updateData.mainCategoryId = data.mainCategoryId;
 
     await db.collection("subcategories").doc(id).update(updateData);
+
+    const oldCategoryId = existingData?.categoryId || "";
+    const oldName = existingData?.name || "";
+    const newCategoryId = data.categoryId !== undefined ? data.categoryId : oldCategoryId;
+    const newName = data.name !== undefined ? data.name : oldName;
+
+    if (oldCategoryId && (oldCategoryId !== newCategoryId || oldName !== newName)) {
+      await db
+        .collection("categories")
+        .doc(oldCategoryId)
+        .update({
+          children: admin.firestore.FieldValue.arrayRemove(oldName),
+          updatedAt: new Date().toISOString(),
+        });
+    }
+
+    if (newCategoryId) {
+      await db
+        .collection("categories")
+        .doc(newCategoryId)
+        .update({
+          children: admin.firestore.FieldValue.arrayUnion(newName),
+          updatedAt: new Date().toISOString(),
+        });
+    }
 
     const updatedDoc = await db.collection("subcategories").doc(id).get();
 
@@ -96,7 +124,20 @@ export async function DELETE(
       throw new Error("Firestore database is not initialized.");
     }
 
+    const existingDoc = await db.collection("subcategories").doc(id).get();
+    const existingData = existingDoc.exists ? existingDoc.data() : null;
+
     await db.collection("subcategories").doc(id).delete();
+
+    if (existingData?.categoryId && existingData?.name) {
+      await db
+        .collection("categories")
+        .doc(existingData.categoryId)
+        .update({
+          children: admin.firestore.FieldValue.arrayRemove(existingData.name),
+          updatedAt: new Date().toISOString(),
+        });
+    }
 
     return NextResponse.json({
       success: true,

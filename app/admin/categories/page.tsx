@@ -61,6 +61,14 @@ interface Subcategory {
   updatedAt?: string
 }
 
+interface ProductSector {
+  id: string
+  name: string
+  order?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 export default function CategoriesPage() {
   const [activeTab, setActiveTab] = useState("main")
   const [isLoading, setIsLoading] = useState(true)
@@ -88,6 +96,12 @@ export default function CategoriesPage() {
   const [isSubcategoryDialogOpen, setIsSubcategoryDialogOpen] = useState(false)
   const [editingSubcategory, setEditingSubcategory] = useState<Subcategory | null>(null)
   const [subcategoryFormData, setSubcategoryFormData] = useState({ name: "", categoryId: "", mainCategoryId: "" })
+
+  // Product Sectors
+  const [productSectors, setProductSectors] = useState<ProductSector[]>([])
+  const [isSectorDialogOpen, setIsSectorDialogOpen] = useState(false)
+  const [editingSector, setEditingSector] = useState<ProductSector | null>(null)
+  const [sectorFormData, setSectorFormData] = useState({ name: "" })
 
   // Fetch all data
   const fetchMainCategories = async () => {
@@ -147,6 +161,20 @@ export default function CategoriesPage() {
     }
   }
 
+  const fetchProductSectors = async () => {
+    try {
+      const response = await fetch("/api/product-sectors")
+      const result = await response.json()
+      if (result.success) {
+        setProductSectors(result.data)
+      } else {
+        setError(result.error || "Failed to fetch product sectors")
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch product sectors")
+    }
+  }
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
@@ -155,6 +183,7 @@ export default function CategoriesPage() {
         fetchMainCategories(),
         fetchCategories(),
         fetchSubcategories(),
+        fetchProductSectors(),
       ])
       setIsLoading(false)
     }
@@ -188,6 +217,13 @@ export default function CategoriesPage() {
       fetchSubcategories(categoryId, mainCategoryId)
     }
   }, [subcategoryFilterCategory, subcategoryFilterMainCategory, activeTab])
+
+  // Refresh product sectors when tab opens
+  useEffect(() => {
+    if (activeTab === "sectors") {
+      fetchProductSectors()
+    }
+  }, [activeTab])
 
   // Main Category Handlers
   const handleOpenMainDialog = (category?: MainCategory) => {
@@ -390,6 +426,69 @@ export default function CategoriesPage() {
     }
   }
 
+  // Product Sector Handlers
+  const handleOpenSectorDialog = (sector?: ProductSector) => {
+    if (sector) {
+      setEditingSector(sector)
+      setSectorFormData({ name: sector.name })
+    } else {
+      setEditingSector(null)
+      setSectorFormData({ name: "" })
+    }
+    setIsSectorDialogOpen(true)
+  }
+
+  const handleCloseSectorDialog = () => {
+    setIsSectorDialogOpen(false)
+    setEditingSector(null)
+    setSectorFormData({ name: "" })
+  }
+
+  const handleSubmitSector = async () => {
+    try {
+      if (!sectorFormData.name.trim()) {
+        alert("Name is required")
+        return
+      }
+
+      const url = editingSector
+        ? `/api/product-sectors/${editingSector.id}`
+        : "/api/product-sectors"
+      const method = editingSector ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sectorFormData),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        await fetchProductSectors()
+        handleCloseSectorDialog()
+      } else {
+        alert(result.error || "Failed to save product sector")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to save product sector")
+    }
+  }
+
+  const handleDeleteSector = async (id: string) => {
+    try {
+      if (!confirm("Are you sure you want to delete this product sector?")) return
+      const response = await fetch(`/api/product-sectors/${id}`, { method: "DELETE" })
+      const result = await response.json()
+      if (result.success) {
+        await fetchProductSectors()
+      } else {
+        alert(result.error || "Failed to delete product sector")
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete product sector")
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -573,10 +672,11 @@ export default function CategoriesPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="main">Main Categories</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="subcategories">Subcategories</TabsTrigger>
+          <TabsTrigger value="sectors">Product Sectors</TabsTrigger>
         </TabsList>
 
         {/* Main Categories Tab */}
@@ -865,6 +965,69 @@ export default function CategoriesPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Product Sectors Tab */}
+        <TabsContent value="sectors" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Product Sectors</CardTitle>
+                  <CardDescription>Manage product sectors</CardDescription>
+                </div>
+                <Button onClick={() => handleOpenSectorDialog()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Sector
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">№</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {productSectors.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        No product sectors found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    productSectors.map((sector, index) => (
+                      <TableRow key={sector.id}>
+                        <TableCell className="text-center">{index + 1}</TableCell>
+                        <TableCell className="font-medium">{sector.name}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenSectorDialog(sector)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteSector(sector.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Main Category Dialog */}
@@ -890,7 +1053,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseMainDialog}>
-              Cancel
+              Хаах
             </Button>
             <Button onClick={handleSubmitMainCategory}>
               {editingMainCategory ? "Update" : "Create"}
@@ -940,7 +1103,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseCategoryDialog}>
-              Cancel
+              Хаах
             </Button>
             <Button onClick={handleSubmitCategory}>
               {editingCategory ? "Update" : "Create"}
@@ -1019,10 +1182,42 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseSubcategoryDialog}>
-              Cancel
+              Хаах
             </Button>
             <Button onClick={handleSubmitSubcategory}>
               {editingSubcategory ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Sector Dialog */}
+      <Dialog open={isSectorDialogOpen} onOpenChange={setIsSectorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingSector ? "Edit Product Sector" : "Add Product Sector"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingSector ? "Update product sector details" : "Create a new product sector"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={sectorFormData.name}
+                onChange={(e) => setSectorFormData({ ...sectorFormData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseSectorDialog}>
+              Хаах
+            </Button>
+            <Button onClick={handleSubmitSector}>
+              {editingSector ? "Update" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>

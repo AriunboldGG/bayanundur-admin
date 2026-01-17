@@ -32,7 +32,7 @@ export async function GET(
     const items = data?.items || data?.selectedProducts || [];
     
     // Normalize the items array structure
-    const normalizedItems = Array.isArray(items) ? items.map((item: any) => {
+    const normalizedItems = Array.isArray(items) ? items.map((item: any, index: number) => {
       // Handle different field name variations
       // Quantity: check quantity, qty, amount fields (preserve 0 values)
       const quantity = item.quantity !== undefined && item.quantity !== null 
@@ -44,7 +44,7 @@ export async function GET(
                 : null));
       
       return {
-        productId: item.productId || item.id || item.product_id || `product-${Math.random()}`,
+        productId: item.productId || item.id || item.product_id || `product-${index}`,
         productName: item.productName || item.name || item.product_name || item.product || "Unknown Product",
         quantity: quantity, // Preserve actual quantity value (including 0)
         status: item.status || "pending",
@@ -86,8 +86,18 @@ export async function GET(
     }
     
     // Build the quote object, ensuring createdAt is always included
-    // Handle both 'note' and 'additionalInfo' field names from Firestore
-    const additionalInfo = data?.additionalInfo || data?.note || "";
+    // Handle different field name variations for customer additional note
+    const additionalInfo =
+      data?.additionalInfo ||
+      data?.note ||
+      data?.additionalNote ||
+      data?.additional_note ||
+      data?.additional_info ||
+      data?.customerNote ||
+      data?.customer_note ||
+      data?.comment ||
+      data?.message ||
+      "";
     
     const quoteData: any = {
       id: doc.id,
@@ -194,10 +204,32 @@ export async function PUT(
     // Fetch updated document
     const updatedDoc = await db.collection("quotes").doc(id).get();
     const data = updatedDoc.data();
+    const items = data?.selectedProducts || data?.items || [];
+    const normalizedItems = Array.isArray(items)
+      ? items.map((item: any, index: number) => ({
+          ...item,
+          productId: item.productId || item.id || item.product_id || `product-${index}`,
+        }))
+      : [];
+
+    // Handle different field name variations for customer additional note
+    const additionalInfo =
+      data?.additionalInfo ||
+      data?.note ||
+      data?.additionalNote ||
+      data?.additional_note ||
+      data?.additional_info ||
+      data?.customerNote ||
+      data?.customer_note ||
+      data?.comment ||
+      data?.message ||
+      "";
+
     const updatedQuote: PriceQuote = {
       id: updatedDoc.id,
       ...data,
-      selectedProducts: data?.selectedProducts || data?.items || [],
+      additionalInfo,
+      selectedProducts: normalizedItems,
     } as PriceQuote;
 
     return NextResponse.json({

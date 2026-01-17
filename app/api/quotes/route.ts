@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         const items = data.items || data.selectedProducts || [];
         
         // Normalize the items array structure
-        const normalizedItems = Array.isArray(items) ? items.map((item: any) => {
+        const normalizedItems = Array.isArray(items) ? items.map((item: any, index: number) => {
           // Handle different field name variations
           // Quantity: check quantity, qty, amount fields (preserve 0 values)
           const quantity = item.quantity !== undefined && item.quantity !== null 
@@ -86,11 +86,11 @@ export async function GET(request: NextRequest) {
                     : null));
           
           return {
-            productId: item.productId || item.id || item.product_id || `product-${Math.random()}`,
+            productId: item.productId || item.id || item.product_id || `product-${index}`,
             productName: item.productName || item.name || item.product_name || item.product || "Unknown Product",
             quantity: quantity, // Preserve actual quantity value (including 0)
             status: item.status || item.status_type || "pending",
-            status_type: item.status_type || item.status || "pending", // Include status_type from backend
+            status_type: item.status || item.status_type || "pending", // Prefer status when available
             // Include all other fields from Firestore
             brand: item.brand || "",
             color: item.color || "",
@@ -147,8 +147,18 @@ export async function GET(request: NextRequest) {
         }
         
         // Build the quote object, ensuring createdAt is always included
-        // Handle both 'note' and 'additionalInfo' field names from Firestore
-        const additionalInfo = data.additionalInfo || data.note || "";
+        // Handle different field name variations for customer additional note
+        const additionalInfo =
+          data.additionalInfo ||
+          data.note ||
+          data.additionalNote ||
+          data.additional_note ||
+          data.additional_info ||
+          data.customerNote ||
+          data.customer_note ||
+          data.comment ||
+          data.message ||
+          "";
         
         const quoteData: any = {
           id: doc.id,

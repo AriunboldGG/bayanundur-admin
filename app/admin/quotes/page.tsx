@@ -73,7 +73,15 @@ export default function QuotesPage() {
   const [startDate, setStartDate] = useState<string>("")
   const [endDate, setEndDate] = useState<string>("")
   const [invoicePrices, setInvoicePrices] = useState<Record<string, string>>({})
+  const [invoiceQuantities, setInvoiceQuantities] = useState<Record<string, number>>({})
+  const [invoiceDeliveryTimes, setInvoiceDeliveryTimes] = useState<Record<string, string>>({})
+  const [invoiceNumber, setInvoiceNumber] = useState<string>("")
+  const [invoiceDate, setInvoiceDate] = useState<string>("")
   const [spentPrices, setSpentPrices] = useState<Record<string, string>>({})
+  const [spentQuantities, setSpentQuantities] = useState<Record<string, number>>({})
+  const [spentDeliveryTimes, setSpentDeliveryTimes] = useState<Record<string, string>>({})
+  const [spentNumber, setSpentNumber] = useState<string>("")
+  const [spentDate, setSpentDate] = useState<string>("")
   const [selectedForSendOffer, setSelectedForSendOffer] = useState<Set<string>>(new Set())
   const [selectedForInvoice, setSelectedForInvoice] = useState<Set<string>>(new Set())
   const [selectedForSpent, setSelectedForSpent] = useState<Set<string>>(new Set())
@@ -82,10 +90,15 @@ export default function QuotesPage() {
   const [quoteNumber, setQuoteNumber] = useState<string>("")
   const [quoteDate, setQuoteDate] = useState<string>("")
   const [companyNote, setCompanyNote] = useState<string>("")
+  const [companyName, setCompanyName] = useState<string>("БАЯН ӨНДӨР ХХК")
   const [companyAddress, setCompanyAddress] = useState<string>("УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
   const [companyEmail, setCompanyEmail] = useState<string>("sales1@bayan-undur.mn")
   const [companyPhone, setCompanyPhone] = useState<string>("70118585")
   const [companyMobile, setCompanyMobile] = useState<string>("99080867")
+  const [companyRegNumber, setCompanyRegNumber] = useState<string>("5332044")
+  const [companyBankName, setCompanyBankName] = useState<string>("Худалдаа хөгжлийн банк")
+  const [companyAccountNumber, setCompanyAccountNumber] = useState<string>("MN610004000 415148288")
+  const [buyerRegNumber, setBuyerRegNumber] = useState<string>("")
   const [sendOfferQuantities, setSendOfferQuantities] = useState<Record<string, number>>({})
   const [sendOfferDeliveryTimes, setSendOfferDeliveryTimes] = useState<Record<string, string>>({})
 
@@ -95,20 +108,26 @@ export default function QuotesPage() {
       const currentDate = new Date().toISOString().split("T")[0]
       setQuoteDate(currentDate)
       
-      // Initialize company note and company info from saved data
+      // Initialize Компанийн тэмдэглэл and company info from saved data
+      setCompanyName((selectedQuote as any).companyName || "БАЯН ӨНДӨР ХХК")
       setCompanyNote((selectedQuote as any).companyNote || "")
       setCompanyAddress((selectedQuote as any).companyAddress || "УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
       setCompanyEmail((selectedQuote as any).companyEmail || "sales1@bayan-undur.mn")
       setCompanyPhone((selectedQuote as any).companyPhone || "70118585")
       setCompanyMobile((selectedQuote as any).companyMobile || "99080867")
+      setCompanyRegNumber((selectedQuote as any).companyRegNumber || "5332044")
+      setCompanyBankName((selectedQuote as any).companyBankName || "Худалдаа хөгжлийн банк")
+      setCompanyAccountNumber((selectedQuote as any).companyAccountNumber || "MN610004000 415148288")
+      setBuyerRegNumber((selectedQuote as any).buyerRegNumber || "")
       
       // Initialize quantities and delivery times for selected products
       const initialQuantities: Record<string, number> = {}
       const initialDeliveryTimes: Record<string, string> = {}
       selectedQuote.selectedProducts
-        .filter(product => selectedForSendOffer.has(product.productId))
-        .forEach(product => {
-          const productId = product.productId || (product as any).id || `product-${Math.random()}`
+        .filter((product, index) => selectedForSendOffer.has(getProductKey(product, index)))
+        .forEach((product, index) => {
+          const productId = getProductKey(product, index)
+          if (!productId) return
           initialQuantities[productId] = product.quantity || 0
           initialDeliveryTimes[productId] = (product as any).delivery_time || (product as any).deliveryTime || ""
         })
@@ -141,15 +160,114 @@ export default function QuotesPage() {
       // Reset when dialog closes
       setQuoteNumber("")
       setQuoteDate("")
+      setCompanyName("БАЯН ӨНДӨР ХХК")
       setCompanyNote("")
       setCompanyAddress("УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот")
       setCompanyEmail("sales1@bayan-undur.mn")
       setCompanyPhone("70118585")
       setCompanyMobile("99080867")
+      setCompanyRegNumber("5332044")
+      setCompanyBankName("Худалдаа хөгжлийн банк")
+      setCompanyAccountNumber("MN610004000 415148288")
+      setBuyerRegNumber("")
       setSendOfferQuantities({})
       setSendOfferDeliveryTimes({})
     }
   }, [isSendOfferDialogOpen, selectedQuote?.id])
+
+  // Generate invoice number when invoice dialog opens
+  useEffect(() => {
+    if (isCreateInvoiceDialogOpen && selectedQuote) {
+      const currentDate = new Date().toISOString().split("T")[0]
+      setInvoiceDate(currentDate)
+
+      // Initialize quantities and delivery times for selected products
+      const initialQuantities: Record<string, number> = {}
+      const initialDeliveryTimes: Record<string, string> = {}
+      selectedQuote.selectedProducts
+        .filter((product, index) => selectedForInvoice.has(getProductKey(product, index)))
+        .forEach((product, index) => {
+          const productId = getProductKey(product, index)
+          if (!productId) return
+          initialQuantities[productId] = product.quantity || 0
+          initialDeliveryTimes[productId] = (product as any).delivery_time || (product as any).deliveryTime || ""
+        })
+      setInvoiceQuantities(initialQuantities)
+      setInvoiceDeliveryTimes(initialDeliveryTimes)
+
+      // Use saved invoice number/date if available, otherwise generate new
+      const savedInvoiceNumber = (selectedQuote as any).invoiceNumber || ""
+      const savedInvoiceDate = (selectedQuote as any).invoiceDate || ""
+      if (savedInvoiceNumber) {
+        setInvoiceNumber(savedInvoiceNumber)
+      } else {
+        generateInvoiceNumber(currentDate)
+          .then((number) => setInvoiceNumber(number))
+          .catch((error) => {
+            console.error("Error generating invoice number:", error)
+            const year = new Date().getFullYear()
+            const month = String(new Date().getMonth() + 1).padStart(2, '0')
+            const day = String(new Date().getDate()).padStart(2, '0')
+            setInvoiceNumber(`BU-INV-${year}${month}${day}-001`)
+          })
+      }
+      if (savedInvoiceDate) {
+        setInvoiceDate(savedInvoiceDate)
+      }
+    } else if (!isCreateInvoiceDialogOpen) {
+      setInvoiceNumber("")
+      setInvoiceDate("")
+      setInvoiceQuantities({})
+      setInvoiceDeliveryTimes({})
+    }
+  }, [isCreateInvoiceDialogOpen, selectedQuote?.id])
+
+  // Generate spent number when expense receipt dialog opens
+  useEffect(() => {
+    if (isSpentDialogOpen && selectedQuote) {
+      const currentDate = new Date().toISOString().split("T")[0]
+      setSpentDate(currentDate)
+
+      // Initialize quantities and delivery times for selected products
+      const initialQuantities: Record<string, number> = {}
+      const initialDeliveryTimes: Record<string, string> = {}
+      selectedQuote.selectedProducts
+        .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
+        .forEach((product, index) => {
+          const productId = getProductKey(product, index)
+          if (!productId) return
+          initialQuantities[productId] = product.quantity || 0
+          initialDeliveryTimes[productId] = (product as any).delivery_time || (product as any).deliveryTime || ""
+        })
+      setSpentQuantities(initialQuantities)
+      setSpentDeliveryTimes(initialDeliveryTimes)
+
+      // Use saved spent number/date if available, otherwise generate new
+      const savedSpentNumber = (selectedQuote as any).spentNumber || ""
+      const savedSpentDate = (selectedQuote as any).spentDate || ""
+      if (savedSpentNumber) {
+        setSpentNumber(savedSpentNumber)
+      } else {
+        generateSpentNumber(currentDate)
+          .then((number) => setSpentNumber(number))
+          .catch((error) => {
+            console.error("Error generating spent number:", error)
+            const year = new Date().getFullYear()
+            const month = String(new Date().getMonth() + 1).padStart(2, '0')
+            const day = String(new Date().getDate()).padStart(2, '0')
+            setSpentNumber(`BU-EXP-${year}${month}${day}-001`)
+          })
+      }
+      if (savedSpentDate) {
+        setSpentDate(savedSpentDate)
+      }
+    } else if (!isSpentDialogOpen) {
+      setSpentNumber("")
+      setSpentDate("")
+      setSpentQuantities({})
+      setSpentDeliveryTimes({})
+    }
+  }, [isSpentDialogOpen, selectedQuote?.id])
 
   // Function to generate quote number in format: BU-QT-YYYYMMDD-XXX
   const generateQuoteNumber = async (quoteDate?: string): Promise<string> => {
@@ -214,6 +332,106 @@ export default function QuotesPage() {
     }
     
     // Fallback: return with 001 if no quotes found for this date
+    return `${prefix}-001`
+  }
+
+  // Function to generate invoice number in format: BU-INV-YYYYMMDD-XXX
+  const generateInvoiceNumber = async (invoiceDate?: string): Promise<string> => {
+    const date = invoiceDate ? new Date(invoiceDate) : new Date()
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${year}${month}${day}`
+    const prefix = `BU-INV-${dateStr}`
+
+    try {
+      const response = await fetch("/api/quotes")
+      const result = await response.json()
+      if (result.success) {
+        const sameDateInvoices = result.data.filter((quote: PriceQuote) => {
+          const existingNumber = (quote as any).invoiceNumber || ""
+          if (existingNumber && existingNumber.startsWith(prefix)) {
+            return true
+          }
+          if ((quote as any).invoiceDate) {
+            const savedDate = new Date((quote as any).invoiceDate)
+            const savedDateStr = `${savedDate.getFullYear()}${String(savedDate.getMonth() + 1).padStart(2, '0')}${String(savedDate.getDate()).padStart(2, '0')}`
+            return savedDateStr === dateStr
+          }
+          return false
+        })
+
+        let maxNumber = 0
+        sameDateInvoices.forEach((quote: PriceQuote) => {
+          const existingNumber = (quote as any).invoiceNumber || ""
+          if (existingNumber && existingNumber.startsWith(prefix)) {
+            const match = existingNumber.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`))
+            if (match) {
+              const num = parseInt(match[1], 10)
+              if (num > maxNumber) {
+                maxNumber = num
+              }
+            }
+          }
+        })
+
+        const nextNumber = (maxNumber + 1).toString().padStart(3, '0')
+        return `${prefix}-${nextNumber}`
+      }
+    } catch (error) {
+      console.error("Error generating invoice number:", error)
+    }
+
+    return `${prefix}-001`
+  }
+
+  // Function to generate expense receipt number in format: BU-EXP-YYYYMMDD-XXX
+  const generateSpentNumber = async (spentDateValue?: string): Promise<string> => {
+    const date = spentDateValue ? new Date(spentDateValue) : new Date()
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${year}${month}${day}`
+    const prefix = `BU-EXP-${dateStr}`
+
+    try {
+      const response = await fetch("/api/quotes")
+      const result = await response.json()
+      if (result.success) {
+        const sameDateSpent = result.data.filter((quote: PriceQuote) => {
+          const existingNumber = (quote as any).spentNumber || ""
+          if (existingNumber && existingNumber.startsWith(prefix)) {
+            return true
+          }
+          if ((quote as any).spentDate) {
+            const savedDate = new Date((quote as any).spentDate)
+            const savedDateStr = `${savedDate.getFullYear()}${String(savedDate.getMonth() + 1).padStart(2, '0')}${String(savedDate.getDate()).padStart(2, '0')}`
+            return savedDateStr === dateStr
+          }
+          return false
+        })
+
+        let maxNumber = 0
+        sameDateSpent.forEach((quote: PriceQuote) => {
+          const existingNumber = (quote as any).spentNumber || ""
+          if (existingNumber && existingNumber.startsWith(prefix)) {
+            const match = existingNumber.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`))
+            if (match) {
+              const num = parseInt(match[1], 10)
+              if (num > maxNumber) {
+                maxNumber = num
+              }
+            }
+          }
+        })
+
+        const nextNumber = (maxNumber + 1).toString().padStart(3, '0')
+        return `${prefix}-${nextNumber}`
+      }
+    } catch (error) {
+      console.error("Error generating spent number:", error)
+    }
+
     return `${prefix}-001`
   }
 
@@ -315,10 +533,27 @@ export default function QuotesPage() {
   const handleViewQuote = (quote: PriceQuote) => {
     setSelectedQuote(quote)
     setIsDialogOpen(true)
-    // Initialize selections - start empty, user will select
-    setSelectedForSendOffer(new Set())
-    setSelectedForInvoice(new Set())
-    setSelectedForSpent(new Set())
+    // Initialize selections based on existing product statuses
+    const sendOfferSet = new Set<string>()
+    const invoiceSet = new Set<string>()
+    const spentSet = new Set<string>()
+    quote.selectedProducts.forEach((product, index) => {
+      const productKey = getProductKey(product, index)
+      if (!productKey) return
+      const statusValue = product.status || (product as any).status_type || "pending"
+      if (["sent_offer", "create_invoice", "spent"].includes(statusValue)) {
+        sendOfferSet.add(productKey)
+      }
+      if (["create_invoice", "spent"].includes(statusValue)) {
+        invoiceSet.add(productKey)
+      }
+      if (statusValue === "spent") {
+        spentSet.add(productKey)
+      }
+    })
+    setSelectedForSendOffer(sendOfferSet)
+    setSelectedForInvoice(invoiceSet)
+    setSelectedForSpent(spentSet)
   }
 
   // Calculate overall quote status based on product statuses
@@ -365,6 +600,15 @@ export default function QuotesPage() {
     }
   }
 
+  const getProductKey = (product: any, index?: number): string => {
+    const key =
+      product?.productId ??
+      product?.id ??
+      product?.product_id ??
+      (index !== undefined ? `product-${index}` : "")
+    return key ? String(key) : ""
+  }
+
   const handleProductStatusChange = async (
     quoteId: string,
     productId: string,
@@ -377,11 +621,13 @@ export default function QuotesPage() {
         throw new Error("Quote not found")
       }
 
-      const updatedProducts = quote.selectedProducts.map((product) =>
-        product.productId === productId
-          ? { ...product, status: newStatus }
-          : product
-      )
+      const updatedProducts = quote.selectedProducts.map((product, index) => {
+        const resolvedProductId = getProductKey(product, index)
+        if (!resolvedProductId) return product
+        return resolvedProductId === productId
+          ? { ...product, productId: resolvedProductId, status: newStatus, status_type: newStatus }
+          : { ...product, productId: resolvedProductId }
+      })
       const newQuoteStatus = calculateQuoteStatus(updatedProducts)
 
       // Save to Firebase
@@ -499,7 +745,7 @@ export default function QuotesPage() {
     if (!selectedQuote) return
 
     const selectedProducts = selectedQuote.selectedProducts.filter(
-      product => selectedForSendOffer.has(product.productId)
+      (product, index) => selectedForSendOffer.has(getProductKey(product, index))
     )
 
     const doc = new Document({
@@ -531,14 +777,44 @@ export default function QuotesPage() {
           }),
           new Paragraph({
             children: [
+              new TextRun({ text: "Албан тушаал: ", bold: true }),
+              new TextRun({ text: selectedQuote.position || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
               new TextRun({ text: "Компани: ", bold: true }),
               new TextRun({ text: selectedQuote.company }),
             ],
           }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: buyerRegNumber || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
+              new TextRun({ text: selectedQuote.additionalInfo || "" }),
+            ],
+          }),
           new Paragraph({ text: "" }),
           new Paragraph({
-            text: "Манай компанийн мэдээлэл",
+            text: "Үнийн санал илгээгч компанийн мэдээлэл",
             heading: "Heading2",
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн нэр: ", bold: true }),
+              new TextRun({ text: companyName }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: companyRegNumber }),
+            ],
           }),
           new Paragraph({
             children: [
@@ -564,6 +840,12 @@ export default function QuotesPage() {
               new TextRun({ text: companyMobile }),
             ],
           }),
+          ...(companyNote ? [new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
+              new TextRun({ text: companyNote }),
+            ],
+          })] : []),
           new Paragraph({ text: "" }),
           new Paragraph({
             text: "Сонгосон бараа",
@@ -585,7 +867,7 @@ export default function QuotesPage() {
                 ],
               }),
               ...selectedProducts.map((product, index) => {
-                const productId = product.productId || (product as any).id || `product-${Math.random()}`
+                const productId = getProductKey(product, index)
                 const unitPrice = (product as any).price || (product as any).priceNum || 0
                 const quantity = sendOfferQuantities[productId] !== undefined 
                   ? sendOfferQuantities[productId] 
@@ -633,6 +915,448 @@ export default function QuotesPage() {
             width: { size: 100, type: WidthType.PERCENTAGE },
           }),
           new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          // Stamp and Signature Section
+          new DocxTable({
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Тэмдэг: ", bold: true }),
+                      ],
+                    })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
+                        new TextRun({ text: "_________________ / _________________ / _________________" }),
+                      ],
+                    })],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+        ],
+      }],
+    })
+
+    const blob = await Packer.toBlob(doc)
+    const fileDate = quoteDate || new Date().toISOString().split("T")[0]
+    const fileQuoteNumber = quoteNumber || selectedQuote.id
+    saveAs(blob, `Send offer - ${fileQuoteNumber} - ${fileDate}.docx`)
+  }
+
+  // Generate Татаж авах document for Invoice
+  const handleDownloadInvoiceWord = async () => {
+    if (!selectedQuote) return
+
+    const selectedProducts = selectedQuote.selectedProducts.filter(
+        (product, index) => selectedForInvoice.has(getProductKey(product, index))
+      )
+
+    const doc = new Document({
+      sections: [{
+        children: [
+          new Paragraph({
+            text: "НЭХЭМЖЛЭЛ ",
+            heading: "Heading1",
+            alignment: AlignmentType.CENTER,
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нэхэмжлэлийн дугаар: ", bold: true }),
+              new TextRun({ text: invoiceNumber || `BU-INV-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001` }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Огноо: ", bold: true }),
+              new TextRun({ text: invoiceDate ? formatDate(invoiceDate) : formatDate(selectedQuote.createdAt) }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
+              new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Албан тушаал: ", bold: true }),
+              new TextRun({ text: selectedQuote.position || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Компани: ", bold: true }),
+              new TextRun({ text: selectedQuote.company }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: buyerRegNumber || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
+              new TextRun({ text: selectedQuote.additionalInfo || "" }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            text: "Нэхэмжлэл илгээгч компанийн мэдээлэл",
+            heading: "Heading2",
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн нэр: ", bold: true }),
+              new TextRun({ text: companyName }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: companyRegNumber }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Банкны нэр: ", bold: true }),
+              new TextRun({ text: companyBankName }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Дансны дугаар: ", bold: true }),
+              new TextRun({ text: companyAccountNumber }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Хаяг: ", bold: true }),
+              new TextRun({ text: companyAddress }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Email: ", bold: true }),
+              new TextRun({ text: companyEmail }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Утас, Факс: ", bold: true }),
+              new TextRun({ text: companyPhone }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Гар утас: ", bold: true }),
+              new TextRun({ text: companyMobile }),
+            ],
+          }),
+          ...(companyNote ? [new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
+              new TextRun({ text: companyNote }),
+            ],
+          })] : []),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            text: "Сонгосон бараа",
+            heading: "Heading2",
+          }),
+          new DocxTable({
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({ children: [new Paragraph("№")] }),
+                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
+                  new DocxTableCell({ children: [new Paragraph("Код")] }),
+                  new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
+                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
+                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
+                ],
+              }),
+              ...selectedProducts.map((product, index) => {
+                const productId = getProductKey(product, index)
+                const fallbackPrice = (product as any).price || (product as any).priceNum || 0
+                const unitPrice = parseFloat(invoicePrices[productId] || String(fallbackPrice)) || 0
+                const quantity = invoiceQuantities[productId] !== undefined 
+                  ? invoiceQuantities[productId] 
+                  : (product.quantity || 0)
+                const total = unitPrice * quantity
+                const productCode = (product as any).product_code || (product as any).productCode || ""
+                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                const deliveryTime = invoiceDeliveryTimes[productId] !== undefined
+                  ? invoiceDeliveryTimes[productId]
+                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                const statusLabel = stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock
+                
+                // Format delivery time date if it exists
+                let deliveryTimeDisplay = "-"
+                if (deliveryTime) {
+                  try {
+                    const date = new Date(deliveryTime)
+                    if (!isNaN(date.getTime())) {
+                      deliveryTimeDisplay = date.toLocaleDateString("mn-MN")
+                    } else {
+                      deliveryTimeDisplay = deliveryTime
+                    }
+                  } catch {
+                    deliveryTimeDisplay = deliveryTime
+                  }
+                }
+                
+                return new DocxTableRow({
+                  children: [
+                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
+                    new DocxTableCell({ children: [new Paragraph(transactionDescription)] }),
+                    new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
+                    new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
+                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
+                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
+                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                  ],
+                })
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+          // Stamp and Signature Section
+          new DocxTable({
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Тэмдэг: ", bold: true }),
+                      ],
+                    })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [new Paragraph({
+                      children: [
+                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
+                        new TextRun({ text: "_________________ / _________________ / _________________" }),
+                      ],
+                    })],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+        ],
+      }],
+    })
+
+    const blob = await Packer.toBlob(doc)
+    const fileDate = invoiceDate || new Date().toISOString().split("T")[0]
+    const fileInvoiceNumber = invoiceNumber || `BU-INV-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`
+    saveAs(blob, `Invoice - ${fileInvoiceNumber} - ${fileDate}.docx`)
+  }
+
+  // Generate Татаж авах document for Зарлагын баримт/Expense Receipt
+  const handleDownloadSpentWord = async () => {
+    if (!selectedQuote) return
+
+    const selectedProducts = selectedQuote.selectedProducts.filter(
+      (product, index) => selectedForSpent.has(getProductKey(product, index))
+    )
+
+    const doc = new Document({
+      sections: [{
+        children: [
+          new Paragraph({
+            text: "ЗАРЛАГЫН БАРИМТ",
+            heading: "Heading1",
+            alignment: AlignmentType.CENTER,
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Зарлагын баримтын дугаар: ", bold: true }),
+              new TextRun({ text: spentNumber || `BU-EXP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001` }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Огноо: ", bold: true }),
+              new TextRun({ text: spentDate ? formatDate(spentDate) : formatDate(selectedQuote.createdAt) }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
+              new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Албан тушаал: ", bold: true }),
+              new TextRun({ text: selectedQuote.position || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Компани: ", bold: true }),
+              new TextRun({ text: selectedQuote.company }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: buyerRegNumber || "-" }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
+              new TextRun({ text: selectedQuote.additionalInfo || "" }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            text: "Зарлагын баримт илгээгч компанийн мэдээлэл",
+            heading: "Heading2",
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн нэр: ", bold: true }),
+              new TextRun({ text: companyName }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Регистерийн №: ", bold: true }),
+              new TextRun({ text: companyRegNumber }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Хаяг: ", bold: true }),
+              new TextRun({ text: companyAddress }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Email: ", bold: true }),
+              new TextRun({ text: companyEmail }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Утас, Факс: ", bold: true }),
+              new TextRun({ text: companyPhone }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Гар утас: ", bold: true }),
+              new TextRun({ text: companyMobile }),
+            ],
+          }),
+          ...(companyNote ? [new Paragraph({
+            children: [
+              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
+              new TextRun({ text: companyNote }),
+            ],
+          })] : []),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            text: "Сонгосон бараа",
+            heading: "Heading2",
+          }),
+          new DocxTable({
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({ children: [new Paragraph("№")] }),
+                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
+                  new DocxTableCell({ children: [new Paragraph("Код")] }),
+                  new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
+                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
+                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
+                ],
+              }),
+              ...selectedProducts.map((product, index) => {
+                const productId = getProductKey(product, index)
+                const fallbackPrice = (product as any).price || (product as any).priceNum || 0
+                const unitPrice = parseFloat(spentPrices[productId] || String(fallbackPrice)) || 0
+                const quantity = spentQuantities[productId] !== undefined 
+                  ? spentQuantities[productId] 
+                  : (product.quantity || 0)
+                const total = unitPrice * quantity
+                const productCode = (product as any).product_code || (product as any).productCode || ""
+                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                const deliveryTime = spentDeliveryTimes[productId] !== undefined
+                  ? spentDeliveryTimes[productId]
+                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                const statusLabel = stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock
+                
+                // Format delivery time date if it exists
+                let deliveryTimeDisplay = "-"
+                if (deliveryTime) {
+                  try {
+                    const date = new Date(deliveryTime)
+                    if (!isNaN(date.getTime())) {
+                      deliveryTimeDisplay = date.toLocaleDateString("mn-MN")
+                    } else {
+                      deliveryTimeDisplay = deliveryTime
+                    }
+                  } catch {
+                    deliveryTimeDisplay = deliveryTime
+                  }
+                }
+                
+                return new DocxTableRow({
+                  children: [
+                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
+                    new DocxTableCell({ children: [new Paragraph(transactionDescription)] }),
+                    new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
+                    new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
+                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
+                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
+                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
+                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                  ],
+                })
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({ text: "" }),
           new Paragraph({
             children: [
               new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
@@ -641,7 +1365,7 @@ export default function QuotesPage() {
           }),
           ...(companyNote ? [new Paragraph({
             children: [
-              new TextRun({ text: "Company Note: ", bold: true }),
+              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
               new TextRun({ text: companyNote }),
             ],
           })] : []),
@@ -680,168 +1404,9 @@ export default function QuotesPage() {
     })
 
     const blob = await Packer.toBlob(doc)
-    saveAs(blob, `Send_Offer_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
-  }
-
-  // Generate Татаж авах document for Invoice
-  const handleDownloadInvoiceWord = async () => {
-    if (!selectedQuote) return
-
-    const selectedProducts = selectedQuote.selectedProducts.filter(
-      product => selectedForInvoice.has(product.productId)
-    )
-
-    const subtotal = selectedProducts.reduce((sum, product) => {
-      const unitPrice = parseFloat(invoicePrices[product.productId] || "0")
-      const quantity = product.quantity || 0
-      return sum + (unitPrice * quantity)
-    }, 0)
-    const vat = subtotal * 0.1
-    const grandTotal = subtotal + vat
-
-    const doc = new Document({
-      sections: [{
-        children: [
-          new Paragraph({
-            text: "НЭХЭМЖЛЭЛ (INVOICE)",
-            heading: "Heading1",
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нэхэмжлэгч (Sender): ", bold: true }),
-              new TextRun({ text: "БАЯН ӨНДӨР ХХК" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Төлөгч (Buyer): ", bold: true }),
-              new TextRun({ text: selectedQuote.company }),
-            ],
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Бараа, үйлчилгээ",
-            heading: "Heading2",
-          }),
-          new DocxTable({
-            rows: [
-              new DocxTableRow({
-                children: [
-                  new DocxTableCell({ children: [new Paragraph("№")] }),
-                  new DocxTableCell({ children: [new Paragraph("Барааны нэр")] }),
-                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн")] }),
-                ],
-              }),
-              ...selectedProducts.map((product, index) => {
-                const unitPrice = invoicePrices[product.productId] || "0"
-                const quantity = product.quantity || 0
-                const total = (parseFloat(unitPrice) * quantity).toFixed(2)
-                return new DocxTableRow({
-                  children: [
-                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
-                    new DocxTableCell({ children: [new Paragraph(product.productName)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(unitPrice)] }),
-                    new DocxTableCell({ children: [new Paragraph(total)] }),
-                  ],
-                })
-              }),
-            ],
-            width: { size: 100, type: WidthType.PERCENTAGE },
-          }),
-
-        ],
-      }],
-    })
-
-    const blob = await Packer.toBlob(doc)
-    saveAs(blob, `Invoice_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
-  }
-
-  // Generate Татаж авах document for Зарлагын баримт/Expense Receipt
-  const handleDownloadSpentWord = async () => {
-    if (!selectedQuote) return
-
-    const selectedProducts = selectedQuote.selectedProducts.filter(
-      product => selectedForSpent.has(product.productId)
-    )
-
-    const grandTotal = selectedProducts.reduce((sum, product) => {
-      const unitPrice = parseFloat(spentPrices[product.productId] || "0")
-      const quantity = product.quantity || 0
-      return sum + (unitPrice * quantity)
-    }, 0)
-
-    const doc = new Document({
-      sections: [{
-        children: [
-          new Paragraph({
-            text: "ЗАРЛАГЫН БАРИМТ (EXPENSE RECEIPT)",
-            heading: "Heading1",
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "БАЯН ӨНДӨР ХХК", bold: true }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Худалдан авагч (Buyer): ", bold: true }),
-              new TextRun({ text: selectedQuote.company }),
-            ],
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Материалын үнэт зүйл (Valuable Materials)",
-            heading: "Heading2",
-          }),
-          new DocxTable({
-            rows: [
-              new DocxTableRow({
-                children: [
-                  new DocxTableCell({ children: [new Paragraph("№")] }),
-                  new DocxTableCell({ children: [new Paragraph("Материалын нэр")] }),
-                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үн")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн")] }),
-                ],
-              }),
-              ...selectedProducts.map((product, index) => {
-                const unitPrice = spentPrices[product.productId] || "0"
-                const quantity = product.quantity || 0
-                const total = (parseFloat(unitPrice) * quantity).toFixed(2)
-                return new DocxTableRow({
-                  children: [
-                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
-                    new DocxTableCell({ children: [new Paragraph(product.productName)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(unitPrice)] }),
-                    new DocxTableCell({ children: [new Paragraph(total)] }),
-                  ],
-                })
-              }),
-            ],
-            width: { size: 100, type: WidthType.PERCENTAGE },
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн (Grand Total): ", bold: true }),
-              new TextRun({ text: grandTotal.toFixed(2) }),
-            ],
-          }),
-        ],
-      }],
-    })
-
-    const blob = await Packer.toBlob(doc)
-    saveAs(blob, `Expense_Receipt_${selectedQuote.id}_${new Date().toISOString().split("T")[0]}.docx`)
+    const fileDate = spentDate || new Date().toISOString().split("T")[0]
+    const fileSpentNumber = spentNumber || `BU-EXP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`
+    saveAs(blob, `Expense Receipt - ${fileSpentNumber} - ${fileDate}.docx`)
   }
 
   // Filter quotes by date range (client-side fallback if server-side filtering fails)
@@ -1414,16 +1979,16 @@ export default function QuotesPage() {
                           
                           return items.map((product: any, index: number) => {
                             // Type the status properly to avoid 'any' indexing errors
-                            // Use status_type from backend, fallback to status
+                            // Prefer status if present, otherwise fallback to status_type
                             type ProductStatus = "sent_offer" | "create_invoice" | "spent" | "pending"
-                            const statusValue = product.status_type || product.status || "pending"
+                            const statusValue = product.status || product.status_type || "pending"
                             const productStatus: ProductStatus = 
                               (statusValue && ["sent_offer", "create_invoice", "spent", "pending"].includes(statusValue))
                                 ? statusValue as ProductStatus
                                 : "pending"
                             // Handle different field names from Firestore
                             const productName = product.productName || product.name || product.product || "Unknown Product"
-                            const productId = product.productId || product.id || `product-${index}`
+                            const productId = getProductKey(product, index)
                             // Handle quantity from items array - check multiple field name variations
                             const quantity = product.quantity !== undefined && product.quantity !== null 
                               ? product.quantity 
@@ -1460,8 +2025,8 @@ export default function QuotesPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-center">
-                                <Badge className={statusColors[productStatus]}>
-                                  {statusValue}
+                                <Badge className={stockStatusColors[(product.stockStatus || product.stock_status || "inStock") as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                  {stockStatusLabels[(product.stockStatus || product.stock_status || "inStock") as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-center">
@@ -1647,8 +2212,21 @@ export default function QuotesPage() {
                       />
                     </div>
                     <div>
-                      <Label>Харигчийн Компани</Label>
+                      <Label>Албан тушаал</Label>
+                      <Input value={selectedQuote.position || ""} disabled />
+                    </div>
+                    <div>
+                      <Label>Компани</Label>
                       <Input value={selectedQuote.company} disabled />
+                    </div>
+                  
+                    <div>
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={buyerRegNumber}
+                        onChange={(e) => setBuyerRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1673,9 +2251,9 @@ export default function QuotesPage() {
                       </TableHeader>
                       <TableBody>
                         {selectedQuote.selectedProducts
-                          .filter(product => selectedForSendOffer.has(product.productId))
+                          .filter((product, index) => selectedForSendOffer.has(getProductKey(product, index)))
                           .map((product, index) => {
-                            const productId = product.productId || (product as any).id || `product-${index}`
+                            const productId = getProductKey(product, index)
                             const unitPrice = (product as any).price || (product as any).priceNum || 0
                             const quantity = sendOfferQuantities[productId] !== undefined 
                               ? sendOfferQuantities[productId] 
@@ -1757,28 +2335,33 @@ export default function QuotesPage() {
                   <Label>Нэмэлт мэдээлэл</Label>
                   <textarea
                     className="w-full min-h-[100px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
-                    placeholder="Add any Нэмэлт мэдээлэл or terms..."
+                    placeholder="Нэмэлт мэдээлэл ..."
                     value={selectedQuote.additionalInfo || ""}
                     readOnly
                     disabled
                   />
                 </div>
 
-                {/* Company Note */}
-                <div>
-                  <Label>Company Note</Label>
-                  <textarea
-                    className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Enter company note (will be displayed in Invoice form)..."
-                    value={companyNote}
-                    onChange={(e) => setCompanyNote(e.target.value)}
-                  />
-                </div>
-
                 {/* Our Company Info */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Манай компанийн мэдээлэл </h3>
+                  <h3 className="text-lg font-semibold mb-3">Үнийн санал илгээгч компанийн мэдээлэл </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Компанийн нэр</Label>
+                      <Input
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="Enter company name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={companyRegNumber}
+                        onChange={(e) => setCompanyRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
+                    </div>
                     <div className="col-span-2">
                       <Label>Хаяг</Label>
                       <Input
@@ -1812,6 +2395,15 @@ export default function QuotesPage() {
                         placeholder="Enter mobile phone"
                       />
                     </div>
+                    <div className="col-span-2">
+                      <Label>Компанийн тэмдэглэл</Label>
+                      <textarea
+                        className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Enter Компанийн тэмдэглэл"
+                        value={companyNote}
+                        onChange={(e) => setCompanyNote(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1822,19 +2414,21 @@ export default function QuotesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSendOfferDialogOpen(false)}>
-              Cancel
+              Хаах
             </Button>
             <Button
               onClick={async () => {
-                // Handle save action - update status to sent_offer and save company note and company info
+                // Handle save action - update status to sent_offer and save Компанийн тэмдэглэл and company info
                 if (selectedQuote) {
                   try {
                     // Update selected products with new quantities and delivery times
-                    const updatedProducts = selectedQuote.selectedProducts.map((product) => {
-                      const productId = product.productId || (product as any).id || ""
-                      if (selectedForSendOffer.has(product.productId)) {
+                    const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
+                      const productId = getProductKey(product, index)
+                      if (!productId) return product
+                      if (selectedForSendOffer.has(productId)) {
                         return {
                           ...product,
+                          productId,
                           quantity: sendOfferQuantities[productId] !== undefined 
                             ? sendOfferQuantities[productId] 
                             : (product.quantity || 0),
@@ -1844,16 +2438,21 @@ export default function QuotesPage() {
                           status: "sent_offer",
                         }
                       }
-                      return product
+                      return { ...product, productId }
                     })
                     
-                    // Save company note, company info, and updated products
+                    // Save Компанийн тэмдэглэл, company info, and updated products
                     const hasChanges = 
+                      companyBankName !== ((selectedQuote as any).companyBankName || "Худалдаа хөгжлийн банк") ||
+                      companyAccountNumber !== ((selectedQuote as any).companyAccountNumber || "MN610004000 415148288") ||
+                      companyName !== ((selectedQuote as any).companyName || "БАЯН ӨНДӨР ХХК") ||
                       companyNote !== ((selectedQuote as any).companyNote || "") ||
                       companyAddress !== ((selectedQuote as any).companyAddress || "") ||
                       companyEmail !== ((selectedQuote as any).companyEmail || "") ||
                       companyPhone !== ((selectedQuote as any).companyPhone || "") ||
                       companyMobile !== ((selectedQuote as any).companyMobile || "") ||
+                      companyRegNumber !== ((selectedQuote as any).companyRegNumber || "5332044") ||
+                      buyerRegNumber !== ((selectedQuote as any).buyerRegNumber || "") ||
                       JSON.stringify(updatedProducts) !== JSON.stringify(selectedQuote.selectedProducts)
                     
                     if (hasChanges) {
@@ -1861,11 +2460,16 @@ export default function QuotesPage() {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
+                          companyBankName: companyBankName,
+                          companyAccountNumber: companyAccountNumber,
+                          companyName: companyName,
                           companyNote: companyNote,
                           companyAddress: companyAddress,
                           companyEmail: companyEmail,
                           companyPhone: companyPhone,
                           companyMobile: companyMobile,
+                          companyRegNumber: companyRegNumber,
+                          buyerRegNumber: buyerRegNumber,
                           selectedProducts: updatedProducts,
                         }),
                       })
@@ -1877,9 +2481,9 @@ export default function QuotesPage() {
                     
                     // Update only selected products to "sent_offer" status
                     const updatePromises = selectedQuote.selectedProducts
-                      .filter(product => selectedForSendOffer.has(product.productId))
-                      .map((product) => {
-                        return handleProductStatusChange(selectedQuote.id, product.productId, "sent_offer")
+                      .filter((product, index) => selectedForSendOffer.has(getProductKey(product, index)))
+                      .map((product, index) => {
+                        return handleProductStatusChange(selectedQuote.id, getProductKey(product, index), "sent_offer")
                       })
                     
                     await Promise.all(updatePromises)
@@ -1907,191 +2511,266 @@ export default function QuotesPage() {
 
       {/* Create Invoice Form Dialog */}
       <Dialog open={isCreateInvoiceDialogOpen} onOpenChange={setIsCreateInvoiceDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
-            <DialogTitle>НЭХЭМЖЛЭЛ (Invoice)</DialogTitle>
-            <DialogDescription>
-              НХМаягт БМ-3 Т-1 | Сангийн сайдын 2017оны 12 дугаар сарын 5ны өдрийн 34 тоот тушаалын хавсралт
-            </DialogDescription>
+            <DialogTitle>НЭХЭМЖЛЭЛ </DialogTitle>
+         
           </DialogHeader>
 
           <div className="space-y-6 py-4">
             {selectedQuote && (
               <>
-                {/* Invoice Number and Date */}
-                <div className="flex justify-between items-center border-b pb-2">
-                  <div>
-                    <Label className="text-lg font-bold">НЭХЭМЖЛЭЛ №</Label>
-                    <Input
-                      placeholder="Invoice number"
-                      className="w-48 mt-1"
-                      defaultValue={`INV-${selectedQuote.id}`}
-                    />
-                  </div>
-                  <div>
-                    <Label>Огноо (Date)</Label>
-                    <Input
-                      type="date"
-                      defaultValue={new Date().toISOString().split("T")[0]}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
-                {/* Sender Information (Нэхэмжлэгч) */}
+                {/* Invoice Information */}
                 <div>
-                  <h3 className="text-base sm:text-lg font-semibold mb-3 border-b pb-1">Нэхэмжлэгч (Sender/Seller)</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Байгууллагын нэр (Company Name)</Label>
-                      <Input value="БАЯН ӨНДӨР ХХК" disabled />
+                      <Label>Нэхэмжлэлийн дугаар</Label>
+                      <Input
+                        value={invoiceNumber}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
+                      />
                     </div>
                     <div>
-                      <Label>Регистерийн № (Registration No.)</Label>
-                      <Input value="5332044" disabled />
-                    </div>
-                    <div className="col-span-2">
-                      <Label>Хаяг (Address)</Label>
+                      <Label>Огноо</Label>
                       <Input
-                        value="УБ хот, Хан-Уул дүүрэг, 20-р хороо, Чингисийн өргөн чөлөө, Мишээл сити оффис М1 тауэр, 11 давхарт, 1107, 1108 тоот"
+                        type="date"
+                        value={invoiceDate || new Date().toISOString().split("T")[0]}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <Label>Худалдан авагчийн нэр</Label>
+                      <Input
+                        value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
                         disabled
                       />
                     </div>
                     <div>
-                      <Label>Email</Label>
-                      <Input value="sales1@bayan-undur.mn" disabled />
+                      <Label>Компани</Label>
+                      <Input value={selectedQuote.company} disabled />
                     </div>
                     <div>
-                      <Label>Утас, Факс (Phone, Fax)</Label>
-                      <Input value="70118585" disabled />
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={buyerRegNumber}
+                        onChange={(e) => setBuyerRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
                     </div>
                     <div>
-                      <Label>Банкны нэр (Bank Name)</Label>
-                      <Input value="Худалдаа хөгжлийн банк" disabled />
+                      <Label>Имэйл</Label>
+                      <Input value={selectedQuote.email} disabled />
                     </div>
                     <div>
-                      <Label>Дансны дугаар (Account Number)</Label>
-                      <Input value="MN610004000 415148288" disabled />
+                      <Label>Утас</Label>
+                      <Input value={selectedQuote.phone} disabled />
+                    </div>
+                    <div>
+                      <Label>Албан тушаал</Label>
+                      <Input value={selectedQuote.position || ""} disabled />
                     </div>
                   </div>
                 </div>
 
-                {/* Receiver Information (Төлөгч) */}
+                {/* Products to Include */}
                 <div>
-                  <h3 className="text-base sm:text-lg font-semibold mb-3 border-b pb-1">Төлөгч (Payer/Buyer)</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Худалдан авагчийн нэр (Buyer Name)</Label>
-                      <Input
-                        value={selectedQuote.company}
-                        onChange={(e) => {
-                          // Handle company name change if needed
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <Label>Регистерийн № (Registration No.)</Label>
-                      <Input placeholder="Enter registration number" />
-                    </div>
-                    <div className="col-span-2">
-                      <Label>Хаяг (Address)</Label>
-                      <Input placeholder="Enter buyer address" />
-                    </div>
-                    {(selectedQuote as any).companyNote && (
-                      <div className="col-span-2">
-                        <Label>Company Note</Label>
-                        <textarea
-                          className="w-full min-h-[80px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
-                          value={(selectedQuote as any).companyNote || ""}
-                          readOnly
-                          disabled
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <Label>Гэрээний дугаар (Agreement Number)</Label>
-                      <Input placeholder="Enter agreement number" />
-                    </div>
-                    <div>
-                      <Label>Нэхэмжилсэн огноо (Invoice Date)</Label>
-                      <Input
-                        type="date"
-                        defaultValue={new Date().toISOString().split("T")[0]}
-                      />
-                    </div>
-                    <div>
-                      <Label>Төлбөр хийх хугацаа (Payment Due Date)</Label>
-                      <Input type="date" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Table */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Бараа, үйлчилгээ (Products/Services)</h3>
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
+                  <h3 className="text-lg font-semibold mb-3">Сонгосон бараанууд</h3>
+                  <div className="border rounded-md overflow-x-hidden">
+                    <Table className="w-full table-fixed">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">№</TableHead>
                           <TableHead>Гүйлгээний утга</TableHead>
-                          <TableHead className="w-24">Код</TableHead>
-                          <TableHead className="w-24">Хэмжих нэгж</TableHead>
-                          <TableHead className="text-right w-24">Тоо</TableHead>
-                          <TableHead className="text-right w-32">Нэгжийн үнэ</TableHead>
-                          <TableHead className="text-right w-32">Нийт дүн</TableHead>
+                          <TableHead>Код</TableHead>
+                          <TableHead>Хэмжих нэгж</TableHead>
+                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead>Барааны төлөв</TableHead>
+                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedQuote.selectedProducts
-                          .filter(product => selectedForInvoice.has(product.productId))
+                          .filter((product, index) => selectedForInvoice.has(getProductKey(product, index)))
                           .map((product, index) => {
-                          const unitPrice = invoicePrices[product.productId] || ""
-                          const quantity = product.quantity || 0
-                          const total = unitPrice ? (parseFloat(unitPrice) * quantity).toFixed(2) : "0.00"
-                          
-                          return (
-                            <TableRow key={index}>
-                              <TableCell>{index + 1}</TableCell>
-                              <TableCell className="font-medium">{product.productName}</TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Code"
-                                  className="w-20"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  defaultValue="TH"
-                                  className="w-20"
-                                />
-                              </TableCell>
-                              <TableCell className="text-right">{quantity}</TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  placeholder="0.00"
-                                  className="w-28 text-right"
-                                  value={unitPrice}
-                                  onChange={(e) => {
-                                    setInvoicePrices({
-                                      ...invoicePrices,
-                                      [product.productId]: e.target.value,
-                                    })
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {parseFloat(total).toLocaleString("mn-MN", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
+                            const productId = getProductKey(product, index)
+                            const fallbackPrice = (product as any).price || (product as any).priceNum || 0
+                            const unitPrice = invoicePrices[productId] || String(fallbackPrice)
+                            const quantity = invoiceQuantities[productId] !== undefined 
+                              ? invoiceQuantities[productId] 
+                              : (product.quantity || 0)
+                            const total = (parseFloat(unitPrice) || 0) * quantity
+                            const productCode = (product as any).product_code || (product as any).productCode || ""
+                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                            const deliveryTime = invoiceDeliveryTimes[productId] !== undefined
+                              ? invoiceDeliveryTimes[productId]
+                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                            
+                            return (
+                              <TableRow key={index}>
+                                <TableCell className="text-center">{index + 1}</TableCell>
+                                <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                <TableCell>{productCode || "-"}</TableCell>
+                                <TableCell>{unitOfMeasurement}</TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={quantity}
+                                    onChange={(e) => {
+                                      const newQuantity = parseFloat(e.target.value) || 0
+                                      setInvoiceQuantities({
+                                        ...invoiceQuantities,
+                                        [productId]: newQuantity
+                                      })
+                                    }}
+                                    className="w-20 text-right"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="min-w-[180px]">
+                                  <Input
+                                    type="date"
+                                    value={deliveryTime}
+                                    onChange={(e) => {
+                                      setInvoiceDeliveryTimes({
+                                        ...invoiceDeliveryTimes,
+                                        [productId]: e.target.value
+                                      })
+                                    }}
+                                    className="w-full"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[140px]">
+                                  <Input
+                                    type="number"
+                                    value={unitPrice}
+                                    onChange={(e) => {
+                                      setInvoicePrices({
+                                        ...invoicePrices,
+                                        [productId]: e.target.value
+                                      })
+                                    }}
+                                    className="w-full text-right"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[180px]">
+                                  <Input
+                                    type="number"
+                                    value={total}
+                                    readOnly
+                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                       </TableBody>
                     </Table>
+                  </div>
+                </div>
+
+                {/* Нэмэлт мэдээлэл */}
+                <div>
+                  <Label>Нэмэлт мэдээлэл</Label>
+                  <textarea
+                    className="w-full min-h-[100px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
+                    placeholder="Нэмэлт мэдээлэл ..."
+                    value={selectedQuote.additionalInfo || ""}
+                    readOnly
+                    disabled
+                  />
+                </div>
+
+                {/* Our Company Info */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Нэхэмжлэл илгээгч компанийн мэдээлэл</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Компанийн нэр</Label>
+                      <Input
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="Enter company name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={companyRegNumber}
+                        onChange={(e) => setCompanyRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
+                    </div>
+                    <div>
+                      <Label>Банкны нэр</Label>
+                      <Input
+                        value={companyBankName}
+                        onChange={(e) => setCompanyBankName(e.target.value)}
+                        placeholder="Enter bank name"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Дансны дугаар</Label>
+                      <Input
+                        value={companyAccountNumber}
+                        onChange={(e) => setCompanyAccountNumber(e.target.value)}
+                        placeholder="Enter account number"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Хаяг</Label>
+                      <Input
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
+                        placeholder="Enter company address"
+                      />
+                    </div>
+                    <div>
+                      <Label>Имэйл хаяг</Label>
+                      <Input
+                        type="email"
+                        value={companyEmail}
+                        onChange={(e) => setCompanyEmail(e.target.value)}
+                        placeholder="Enter email"
+                      />
+                    </div>
+                    <div>
+                      <Label>Утас, Факс</Label>
+                      <Input
+                        value={companyPhone}
+                        onChange={(e) => setCompanyPhone(e.target.value)}
+                        placeholder="Enter phone/fax"
+                      />
+                    </div>
+                    <div>
+                      <Label>Гар утас</Label>
+                      <Input
+                        value={companyMobile}
+                        onChange={(e) => setCompanyMobile(e.target.value)}
+                        placeholder="Enter mobile number"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Компанийн тэмдэглэл</Label>
+                      <textarea
+                        className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Enter Компанийн тэмдэглэл "
+                        value={companyNote}
+                        onChange={(e) => setCompanyNote(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
              
@@ -2100,29 +2779,124 @@ export default function QuotesPage() {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={handleDownloadInvoiceWord}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Татаж авах
-            </Button>
             <Button variant="outline" onClick={() => setIsCreateInvoiceDialogOpen(false)}>
-              Цуцлах 
+              Хаах 
             </Button>
             <Button
               onClick={async () => {
                 // Handle save action - update status to create_invoice
                 if (selectedQuote) {
                   try {
+                    const missingDeliveryTime = selectedQuote.selectedProducts.filter((product, index) => {
+                      const productId = getProductKey(product, index)
+                      if (!productId || !selectedForInvoice.has(productId)) return false
+                      const deliveryTime =
+                        invoiceDeliveryTimes[productId] ??
+                        (product as any).delivery_time ??
+                        (product as any).deliveryTime ??
+                        ""
+                      return !deliveryTime
+                    })
+
+                    if (missingDeliveryTime.length > 0) {
+                      alert("Нийлүүлэх хугацаа заавал бөглөнө үү.")
+                      return
+                    }
+
+                    const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
+                      const productId = getProductKey(product, index)
+                      if (!productId) return product
+                      if (selectedForInvoice.has(productId)) {
+                        return {
+                          ...product,
+                          productId,
+                          quantity: invoiceQuantities[productId] !== undefined 
+                            ? invoiceQuantities[productId] 
+                            : (product.quantity || 0),
+                          delivery_time: invoiceDeliveryTimes[productId] !== undefined
+                            ? invoiceDeliveryTimes[productId]
+                            : ((product as any).delivery_time || (product as any).deliveryTime || ""),
+                        }
+                      }
+                      return { ...product, productId }
+                    })
+
+                    // Save invoice info, Компанийн тэмдэглэл, and company info if changed
+                    const hasChanges = 
+                      invoiceNumber !== ((selectedQuote as any).invoiceNumber || "") ||
+                      invoiceDate !== ((selectedQuote as any).invoiceDate || "") ||
+                      companyBankName !== ((selectedQuote as any).companyBankName || "Худалдаа хөгжлийн банк") ||
+                      companyAccountNumber !== ((selectedQuote as any).companyAccountNumber || "MN610004000 415148288") ||
+                      companyName !== ((selectedQuote as any).companyName || "БАЯН ӨНДӨР ХХК") ||
+                      companyNote !== ((selectedQuote as any).companyNote || "") ||
+                      companyAddress !== ((selectedQuote as any).companyAddress || "") ||
+                      companyEmail !== ((selectedQuote as any).companyEmail || "") ||
+                      companyPhone !== ((selectedQuote as any).companyPhone || "") ||
+                      companyMobile !== ((selectedQuote as any).companyMobile || "") ||
+                      companyRegNumber !== ((selectedQuote as any).companyRegNumber || "5332044") ||
+                      buyerRegNumber !== ((selectedQuote as any).buyerRegNumber || "") ||
+                      JSON.stringify(updatedProducts) !== JSON.stringify(selectedQuote.selectedProducts)
+
+                    if (hasChanges) {
+                      const response = await fetch(`/api/quotes/${selectedQuote.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          invoiceNumber: invoiceNumber,
+                          invoiceDate: invoiceDate,
+                          companyBankName: companyBankName,
+                          companyAccountNumber: companyAccountNumber,
+                          companyName: companyName,
+                          companyNote: companyNote,
+                          companyAddress: companyAddress,
+                          companyEmail: companyEmail,
+                          companyPhone: companyPhone,
+                          companyMobile: companyMobile,
+                          companyRegNumber: companyRegNumber,
+                          buyerRegNumber: buyerRegNumber,
+                          selectedProducts: updatedProducts,
+                        }),
+                      })
+                      const result = await response.json()
+                      if (!result.success) {
+                        throw new Error(result.error || "Failed to save company information")
+                      }
+                    }
+
                     // Update only selected products to "create_invoice" status
                     const updatePromises = selectedQuote.selectedProducts
-                      .filter(product => selectedForInvoice.has(product.productId))
-                      .map((product) => {
-                        return handleProductStatusChange(selectedQuote.id, product.productId, "create_invoice")
+                      .filter((product, index) => selectedForInvoice.has(getProductKey(product, index)))
+                      .map((product, index) => {
+                        return handleProductStatusChange(selectedQuote.id, getProductKey(product, index), "create_invoice")
                       })
                     
                     await Promise.all(updatePromises)
+                    setSelectedQuote((prev) => prev ? {
+                      ...prev,
+                      invoiceNumber,
+                      invoiceDate,
+                      companyNote,
+                      companyAddress,
+                      companyEmail,
+                      companyPhone,
+                      companyMobile,
+                      selectedProducts: updatedProducts,
+                    } : prev)
+                    setQuotes((prev) => prev.map((quote) => 
+                      quote.id === selectedQuote.id
+                        ? {
+                            ...quote,
+                            invoiceNumber,
+                            invoiceDate,
+                            companyNote,
+                            companyAddress,
+                            companyEmail,
+                            companyPhone,
+                            companyMobile,
+                            selectedProducts: updatedProducts,
+                          }
+                        : quote
+                    ))
                     setIsCreateInvoiceDialogOpen(false)
                     await fetchQuotes() // Refresh quotes list
                   } catch (error) {
@@ -2133,234 +2907,262 @@ export default function QuotesPage() {
             >
               Хадгалах 
             </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadInvoiceWord}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Татаж авах
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Зарлагын баримт Form Dialog - Expense Receipt */}
       <Dialog open={isSpentDialogOpen} onOpenChange={setIsSpentDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
-            <DialogTitle>ЗАРЛАГЫН БАРИМТ (Expense Receipt)</DialogTitle>
-            <DialogDescription>
-              НХМаягт БМ-3 | Сангийн сайдын 2017 оны ....тоот тушаалын хавсралт
-            </DialogDescription>
+            <DialogTitle>ЗАРЛАГЫН БАРИМТ</DialogTitle>
+
           </DialogHeader>
 
           <div className="space-y-6 py-4">
             {selectedQuote && (
               <>
-                {/* Expense Receipt Number and Date */}
-                <div className="flex justify-between items-center border-b pb-2">
-                  <div>
-                    <Label className="text-lg font-bold">ЗАРЛАГЫН БАРИМТ №</Label>
-                    <Input
-                      placeholder="Expense receipt number"
-                      className="w-48 mt-1"
-                      defaultValue={`EXP-${selectedQuote.id}`}
-                    />
-                  </div>
-                  <div>
-                    <Label>Огноо (Date)</Label>
-                    <Input
-                      type="date"
-                      defaultValue={new Date().toISOString().split("T")[0]}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
-                {/* Sender and Receiver Information Side by Side */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Sender Information (Left) */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 border-b pb-1">
-                      БАЯН ӨНДӨР ХХК
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-3">(Байгууллагын нэр)</p>
-                    <div className="space-y-3">
-                      <div>
-                        <Label>Регистерийн № (Registration No.)</Label>
-                        <div className="flex gap-1 mt-1">
-                          {["5", "3", "3", "2", "0", "4", "4"].map((digit, idx) => (
-                            <Input
-                              key={idx}
-                              value={digit}
-                              disabled
-                              className="w-10 text-center"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Огноо (Date)</Label>
-                        <Input
-                          type="date"
-                          defaultValue={new Date().toISOString().split("T")[0]}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Receiver Information (Right) */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 border-b pb-1">
-                      Худалдан авагч
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-3">(Худалдан авагчийн нэр)</p>
-                    <div className="space-y-3">
-                      <div>
-                        <Label>Худалдан авагчийн нэр (Buyer Name)</Label>
-                        <Input
-                          value={selectedQuote.company}
-                        />
-                      </div>
-                      <div>
-                        <Label>Регистерийн № (Registration No.)</Label>
-                        <div className="flex gap-1 mt-1">
-                          {Array.from({ length: 8 }).map((_, idx) => (
-                            <Input
-                              key={idx}
-                              placeholder=""
-                              className="w-10 text-center"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>(тээвэрлэгчийн хаяг, албан тушаал, нэр)</Label>
-                        <Input
-                          placeholder="Carrier's address, position, name"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Table */}
+                {/* Expense Receipt Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Материалын үнэт зүйл (Valuable Materials)</h3>
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Зарлагын баримтын дугаар</Label>
+                      <Input
+                        value={spentNumber}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <Label>Огноо</Label>
+                      <Input
+                        type="date"
+                        value={spentDate || new Date().toISOString().split("T")[0]}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <Label>Худалдан авагчийн нэр</Label>
+                      <Input
+                        value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <Label>Компани</Label>
+                      <Input value={selectedQuote.company} disabled />
+                    </div>
+                    <div>
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={buyerRegNumber}
+                        onChange={(e) => setBuyerRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
+                    </div>
+                    <div>
+                      <Label>Имэйл</Label>
+                      <Input value={selectedQuote.email} disabled />
+                    </div>
+                    <div>
+                      <Label>Утас</Label>
+                      <Input value={selectedQuote.phone} disabled />
+                    </div>
+                    <div>
+                      <Label>Албан тушаал</Label>
+                      <Input value={selectedQuote.position || ""} disabled />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Products to Include */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Сонгосон бараанууд</h3>
+                  <div className="border rounded-md overflow-x-hidden">
+                    <Table className="w-full table-fixed">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">№</TableHead>
-                          <TableHead>Материалын үнэт зүйлийн нэр, зэрэг дугаар</TableHead>
-                          <TableHead className="w-24">Код</TableHead>
-                          <TableHead className="w-24">Хэмжих нэгж</TableHead>
-                          <TableHead className="text-right w-24">Тоо</TableHead>
-                          <TableHead className="text-right w-32">
-                            <div className="text-center">Худалдах</div>
-                            <div className="text-sm mt-1">Нэгжийн үн</div>
-                          </TableHead>
-                          <TableHead className="text-right w-32">
-                            <div className="text-center">Худалдах</div>
-                            <div className="text-sm mt-1">Нийт дүн</div>
-                          </TableHead>
+                          <TableHead>Гүйлгээний утга</TableHead>
+                          <TableHead>Код</TableHead>
+                          <TableHead>Хэмжих нэгж</TableHead>
+                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead>Барааны төлөв</TableHead>
+                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedQuote.selectedProducts
-                          .filter(product => selectedForSpent.has(product.productId))
+                          .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
                           .map((product, index) => {
-                          const unitPrice = spentPrices[product.productId] || ""
-                          const quantity = product.quantity || 0
-                          const total = unitPrice ? (parseFloat(unitPrice) * quantity).toFixed(2) : "0.00"
-                          
-                          return (
-                            <TableRow key={index}>
-                              <TableCell>{index + 1}</TableCell>
-                              <TableCell className="font-medium">{product.productName}</TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Code"
-                                  className="w-20"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  defaultValue="TH"
-                                  className="w-20"
-                                />
-                              </TableCell>
-                              <TableCell className="text-right">{quantity}</TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  placeholder="0.00"
-                                  className="w-28 text-right"
-                                  value={unitPrice}
-                                  onChange={(e) => {
-                                    setSpentPrices({
-                                      ...spentPrices,
-                                      [product.productId]: e.target.value,
-                                    })
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {parseFloat(total).toLocaleString("mn-MN", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
+                            const productId = getProductKey(product, index)
+                            const fallbackPrice = (product as any).price || (product as any).priceNum || 0
+                            const unitPrice = spentPrices[productId] || String(fallbackPrice)
+                            const quantity = spentQuantities[productId] !== undefined 
+                              ? spentQuantities[productId] 
+                              : (product.quantity || 0)
+                            const total = (parseFloat(unitPrice) || 0) * quantity
+                            const productCode = (product as any).product_code || (product as any).productCode || ""
+                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                            const deliveryTime = spentDeliveryTimes[productId] !== undefined
+                              ? spentDeliveryTimes[productId]
+                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                            
+                            return (
+                              <TableRow key={index}>
+                                <TableCell className="text-center">{index + 1}</TableCell>
+                                <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                <TableCell>{productCode || "-"}</TableCell>
+                                <TableCell>{unitOfMeasurement}</TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={quantity}
+                                    onChange={(e) => {
+                                      const newQuantity = parseFloat(e.target.value) || 0
+                                      setSpentQuantities({
+                                        ...spentQuantities,
+                                        [productId]: newQuantity
+                                      })
+                                    }}
+                                    className="w-20 text-right"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="min-w-[180px]">
+                                  <Input
+                                    type="date"
+                                    value={deliveryTime}
+                                    onChange={(e) => {
+                                      setSpentDeliveryTimes({
+                                        ...spentDeliveryTimes,
+                                        [productId]: e.target.value
+                                      })
+                                    }}
+                                    className="w-full"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[140px]">
+                                  <Input
+                                    type="number"
+                                    value={unitPrice}
+                                    onChange={(e) => {
+                                      setSpentPrices({
+                                        ...spentPrices,
+                                        [productId]: e.target.value
+                                      })
+                                    }}
+                                    className="w-full text-right"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right min-w-[180px]">
+                                  <Input
+                                    type="number"
+                                    value={total}
+                                    readOnly
+                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                       </TableBody>
                     </Table>
                   </div>
                 </div>
 
-                {/* Grand Total */}
-                {(() => {
-                  const grandTotal = selectedQuote.selectedProducts
-                    .filter(product => selectedForSpent.has(product.productId))
-                    .reduce((sum, product) => {
-                    const unitPrice = parseFloat(spentPrices[product.productId] || "0")
-                    const quantity = product.quantity || 0
-                    return sum + (unitPrice * quantity)
-                  }, 0)
-                  
-                  return (
-                    <div className="border rounded-md p-4 bg-gray-50">
-                      <div className="flex justify-between items-center">
-                        <Label className="text-lg font-bold">Нийт дүн (Grand Total):</Label>
-                        <span className="text-lg font-bold">
-                          {grandTotal.toLocaleString("mn-MN", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })()}
+                {/* Нэмэлт мэдээлэл */}
+                <div>
+                  <Label>Нэмэлт мэдээлэл</Label>
+                  <textarea
+                    className="w-full min-h-[100px] rounded-md border border-input bg-muted px-3 py-2 text-sm cursor-not-allowed"
+                    placeholder="Нэмэлт мэдээлэл ..."
+                    value={selectedQuote.additionalInfo || ""}
+                    readOnly
+                    disabled
+                  />
+                </div>
 
-                {/* Signature Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-                  <div>
-                    <Label>Тэмдэг (Stamp)</Label>
-                    <div className="mt-2 h-20 border rounded-md"></div>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Хүлээлгэн өгсөн эд хариуцагч (Property custodian who handed over)</Label>
-                      <div className="mt-1 border-b-2 border-dotted pb-1">
-                        <span className="text-sm text-muted-foreground">Signature / Name</span>
-                      </div>
+                {/* Our Company Info */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Зарлагын баримт илгээгч компанийн мэдээлэл</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Компанийн нэр</Label>
+                      <Input
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="БАЯН ӨНДӨР ХХК"
+                      />
                     </div>
                     <div>
-                      <Label>Хүлээн авагч (Recipient)</Label>
-                      <div className="mt-1 border-b-2 border-dotted pb-1">
-                        <span className="text-sm text-muted-foreground">Signature / Name</span>
-                      </div>
+                      <Label>Регистерийн №</Label>
+                      <Input
+                        value={companyRegNumber}
+                        onChange={(e) => setCompanyRegNumber(e.target.value)}
+                        placeholder="Enter registration number"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Хаяг</Label>
+                      <Input
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
+                        placeholder="Enter company address"
+                      />
                     </div>
                     <div>
-                      <Label>Шалгасан нягтлан бодогч (Accountant who checked)</Label>
-                      <div className="mt-1 border-b-2 border-dotted pb-1">
-                        <span className="text-sm text-muted-foreground">Signature / Name</span>
-                      </div>
+                      <Label>Имэйл хаяг</Label>
+                      <Input
+                        type="email"
+                        value={companyEmail}
+                        onChange={(e) => setCompanyEmail(e.target.value)}
+                        placeholder="Enter email"
+                      />
+                    </div>
+                    <div>
+                      <Label>Утас, Факс</Label>
+                      <Input
+                        value={companyPhone}
+                        onChange={(e) => setCompanyPhone(e.target.value)}
+                        placeholder="Enter phone/fax"
+                      />
+                    </div>
+                    <div>
+                      <Label>Гар утас</Label>
+                      <Input
+                        value={companyMobile}
+                        onChange={(e) => setCompanyMobile(e.target.value)}
+                        placeholder="Enter mobile number"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Компанийн тэмдэглэл</Label>
+                      <textarea
+                        className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Enter Компанийн тэмдэглэл (will be displayed in Invoice form)..."
+                        value={companyNote}
+                        onChange={(e) => setCompanyNote(e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>
@@ -2377,21 +3179,136 @@ export default function QuotesPage() {
               Татаж авах
             </Button>
             <Button variant="outline" onClick={() => setIsSpentDialogOpen(false)}>
-              Цуцлах 
+              Хаах 
             </Button>
             <Button
               onClick={async () => {
                 // Handle save action - update status to spent
                 if (selectedQuote) {
                   try {
+                    const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
+                      const productId = getProductKey(product, index)
+                      if (!productId) return product
+                      if (selectedForSpent.has(productId)) {
+                        return {
+                          ...product,
+                          productId,
+                          quantity: spentQuantities[productId] !== undefined 
+                            ? spentQuantities[productId] 
+                            : (product.quantity || 0),
+                          delivery_time: spentDeliveryTimes[productId] !== undefined
+                            ? spentDeliveryTimes[productId]
+                            : ((product as any).delivery_time || (product as any).deliveryTime || ""),
+                        }
+                      }
+                      return { ...product, productId }
+                    })
+
+                    const hasChanges = 
+                      spentNumber !== ((selectedQuote as any).spentNumber || "") ||
+                      spentDate !== ((selectedQuote as any).spentDate || "") ||
+                      companyBankName !== ((selectedQuote as any).companyBankName || "Худалдаа хөгжлийн банк") ||
+                      companyAccountNumber !== ((selectedQuote as any).companyAccountNumber || "MN610004000 415148288") ||
+                      companyName !== ((selectedQuote as any).companyName || "БАЯН ӨНДӨР ХХК") ||
+                      companyNote !== ((selectedQuote as any).companyNote || "") ||
+                      companyAddress !== ((selectedQuote as any).companyAddress || "") ||
+                      companyEmail !== ((selectedQuote as any).companyEmail || "") ||
+                      companyPhone !== ((selectedQuote as any).companyPhone || "") ||
+                      companyMobile !== ((selectedQuote as any).companyMobile || "") ||
+                      companyRegNumber !== ((selectedQuote as any).companyRegNumber || "5332044") ||
+                      buyerRegNumber !== ((selectedQuote as any).buyerRegNumber || "") ||
+                      JSON.stringify(updatedProducts) !== JSON.stringify(selectedQuote.selectedProducts)
+
+                    if (hasChanges) {
+                      const response = await fetch(`/api/quotes/${selectedQuote.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          spentNumber: spentNumber,
+                          spentDate: spentDate,
+                          companyBankName: companyBankName,
+                          companyAccountNumber: companyAccountNumber,
+                          companyName: companyName,
+                          companyNote: companyNote,
+                          companyAddress: companyAddress,
+                          companyEmail: companyEmail,
+                          companyPhone: companyPhone,
+                          companyMobile: companyMobile,
+                          companyRegNumber: companyRegNumber,
+                          buyerRegNumber: buyerRegNumber,
+                          selectedProducts: updatedProducts,
+                        }),
+                      })
+                      const result = await response.json()
+                      if (!result.success) {
+                        throw new Error(result.error || "Failed to save expense receipt information")
+                      }
+                    }
+
                     // Update only selected products to "spent" status
                     const updatePromises = selectedQuote.selectedProducts
-                      .filter(product => selectedForSpent.has(product.productId))
-                      .map((product) => {
-                        return handleProductStatusChange(selectedQuote.id, product.productId, "spent")
+                      .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
+                      .map((product, index) => {
+                        return handleProductStatusChange(selectedQuote.id, getProductKey(product, index), "spent")
                       })
                     
                     await Promise.all(updatePromises)
+                    
+                    // Decrement stock only for items newly marked as spent
+                    const itemsToDecrement = selectedQuote.selectedProducts
+                      .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
+                      .filter((product) => {
+                        const statusValue = product.status || (product as any).status_type || "pending"
+                        return statusValue !== "spent"
+                      })
+                      .map((product, index) => {
+                        const productId = (product as any).productId || (product as any).id || ""
+                        const resolvedId = String(productId).trim()
+                        const quantity = spentQuantities[getProductKey(product, index)] !== undefined
+                          ? spentQuantities[getProductKey(product, index)]
+                          : (product as any).quantity || 0
+                        return { productId: resolvedId, quantity: Number(quantity) || 0 }
+                      })
+                      .filter((item) => item.productId && item.quantity > 0)
+
+                    if (itemsToDecrement.length > 0) {
+                      const stockResponse = await fetch("/api/products/decrement-stock", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ items: itemsToDecrement }),
+                      })
+                      const stockResult = await stockResponse.json()
+                      if (!stockResult.success) {
+                        throw new Error(stockResult.error || "Failed to update product stock")
+                      }
+                    }
+
+                    setSelectedQuote((prev) => prev ? {
+                      ...prev,
+                      spentNumber,
+                      spentDate,
+                      companyNote,
+                      companyAddress,
+                      companyEmail,
+                      companyPhone,
+                      companyMobile,
+                      selectedProducts: updatedProducts,
+                    } : prev)
+                    setQuotes((prev) => prev.map((quote) => 
+                      quote.id === selectedQuote.id
+                        ? {
+                            ...quote,
+                            spentNumber,
+                            spentDate,
+                            companyNote,
+                            companyAddress,
+                            companyEmail,
+                            companyPhone,
+                            companyMobile,
+                            selectedProducts: updatedProducts,
+                          }
+                        : quote
+                    ))
                     setIsSpentDialogOpen(false)
                     await fetchQuotes() // Refresh quotes list
                   } catch (error) {

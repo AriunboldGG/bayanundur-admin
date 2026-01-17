@@ -45,6 +45,7 @@ interface Product {
   mainCategory?: string
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
+  product_sector?: string // Product sector
   "model number"?: string // Модел дугаар (Model number)
   product_code?: string // Product code (auto-generated)
   brand_image?: string // Brand image URL
@@ -56,6 +57,13 @@ interface Product {
 interface MainCategoryItem {
   id: string
   name: string
+  nameEn?: string
+}
+
+interface ProductSectorItem {
+  id: string
+  name: string
+  order?: number
 }
 
 interface CategoryItem {
@@ -96,6 +104,7 @@ export default function ProductsPage() {
     mainCategory: "", // Main category ID
     category: "", // Ангилал (subcategory)
     subcategory: "", // Дэд ангилал (sub-subcategory if exists)
+    productSector: "", // Product sector (id or name)
     modelNumber: "", // Модел дугаар
     productCode: "", // Product code (auto-generated)
     productTypes: [] as string[], // Product types array
@@ -116,6 +125,7 @@ export default function ProductsPage() {
   const [mainCategoriesList, setMainCategoriesList] = useState<MainCategoryItem[]>([])
   const [categoriesList, setCategoriesList] = useState<CategoryItem[]>([])
   const [subcategoriesList, setSubcategoriesList] = useState<SubcategoryItem[]>([])
+  const [productSectors, setProductSectors] = useState<ProductSectorItem[]>([])
   const [productImages, setProductImages] = useState<string[]>([]) // Array of image URLs
   const [imageFiles, setImageFiles] = useState<File[]>([]) // Array of File objects for new uploads
   const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
@@ -132,7 +142,33 @@ export default function ProductsPage() {
   const [colorInput, setColorInput] = useState("")
   const [sizeInput, setSizeInput] = useState("")
 
+  const getSubSubcategoriesForCategory = (categoryIdOrName: string) => {
+    if (!categoryIdOrName) return []
+    const categoryName = getCategoryNameById(categoryIdOrName)
+    return subcategoriesList.filter((sub) =>
+      sub.categoryId === categoryIdOrName || sub.categoryId === categoryName
+    )
+  }
+
   // Function to generate product code based on main category
+  const getMainCategoryCode = (mainCategoryId: string): string => {
+    const mainCategory = mainCategoriesList.find(cat => cat.id === mainCategoryId)
+    const baseName = (mainCategory?.nameEn || mainCategory?.name || "").trim()
+    const rawCode = baseName || mainCategoryId
+    const normalized = rawCode
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 6)
+    if (normalized) {
+      return normalized
+    }
+
+    const fallback = mainCategoryId
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 6)
+    return fallback || "CAT"
+  }
   const generateProductCode = async (mainCategoryId: string): Promise<string> => {
     if (!mainCategoryId) return ""
     
@@ -140,8 +176,9 @@ export default function ProductsPage() {
     const mainCategoryName = getCategoryNameById(mainCategoryId)
     if (!mainCategoryName) return ""
     
-    // Get category prefix (e.g., "1" -> "CAT1", "2" -> "CAT2")
-    const categoryPrefix = `CAT${mainCategoryId}`
+    // Use readable code based on name instead of long IDs
+    const categoryCode = getMainCategoryCode(mainCategoryId)
+    const categoryPrefix = `CAT-${categoryCode}`
     
     // Fetch existing products to check for duplicates
     try {
@@ -186,6 +223,7 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts()
     fetchAllCategories()
+    fetchProductSectors()
   }, [])
 
   const fetchAllCategories = async () => {
@@ -218,6 +256,18 @@ export default function ProductsPage() {
     }
   }
 
+  const fetchProductSectors = async () => {
+    try {
+      const response = await fetch("/api/product-sectors")
+      const result = await response.json()
+      if (result.success) {
+        setProductSectors(result.data)
+      }
+    } catch (err) {
+      console.error("Error fetching product sectors:", err)
+    }
+  }
+
   useEffect(() => {
     if (selectedMainCategory) {
       setAvailableSubcategories(
@@ -228,9 +278,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (formData.category) {
-      setAvailableSubSubcategories(
-        subcategoriesList.filter(sub => sub.categoryId === formData.category)
-      )
+      setAvailableSubSubcategories(getSubSubcategoriesForCategory(formData.category))
     }
   }, [formData.category, subcategoriesList])
 
@@ -306,6 +354,7 @@ export default function ProductsPage() {
           mainCategory: product.mainCategory || "",
           category: product.category || "",
           subcategory: product.subcategory || "",
+          product_sector: product.product_sector || product.productSector || "",
           "model number": product["model number"] || product.model_number || product.modelNumber || "",
           product_code: product.product_code || product.productCode || "",
           brand_image: product.brand_image || product.brandImage || "",
@@ -374,6 +423,7 @@ export default function ProductsPage() {
         mainCategory: product.mainCategory || "",
         category: product.category || "",
         subcategory: product.subcategory || "",
+        productSector: product.product_sector || (product as any).productSector || "",
         modelNumber: product["model number"] || "",
         productCode: product.product_code || "",
         productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
@@ -432,6 +482,7 @@ export default function ProductsPage() {
         mainCategory: "",
         category: "",
         subcategory: "",
+        productSector: "",
         modelNumber: "",
         productCode: "",
         productTypes: [],
@@ -470,6 +521,7 @@ export default function ProductsPage() {
       mainCategory: "",
       category: "",
       subcategory: "",
+      productSector: "",
       modelNumber: "",
       productCode: "",
       productTypes: [],
@@ -583,7 +635,7 @@ export default function ProductsPage() {
   const handleSubcategoryChange = (subcategoryId: string) => {
     setFormData({ ...formData, category: subcategoryId, subcategory: "" })
     
-    const filteredSubcategories = subcategoriesList.filter(sub => sub.categoryId === subcategoryId)
+    const filteredSubcategories = getSubSubcategoriesForCategory(subcategoryId)
     setAvailableSubSubcategories(filteredSubcategories)
   }
   
@@ -636,6 +688,11 @@ export default function ProductsPage() {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!formData.productSector) {
+      alert("Салбарын ангилал сонгоно уу (Please select product sector)")
+      return
+    }
     
     if (!selectedMainCategory) {
       alert("Үндсэн ангилал сонгоно уу (Please select main category)")
@@ -700,6 +757,7 @@ export default function ProductsPage() {
       formDataToSend.append('mainCategory', mainCategoryName) // Send name instead of ID
       formDataToSend.append('category', categoryName) // Send name instead of ID
       formDataToSend.append('subcategory', subcategoryName) // Send name instead of ID
+      formDataToSend.append('product_sector', formData.productSector)
       formDataToSend.append('model_number', formData.modelNumber)
       formDataToSend.append('product_code', formData.productCode)
       formDataToSend.append('productTypes', JSON.stringify(formData.productTypes))
@@ -1050,6 +1108,35 @@ export default function ProductsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {/* Product Sector Selection */}
+              <div className="grid gap-2">
+                <Label htmlFor="productSector">Салбарын ангилал (Product Sector) *</Label>
+                <Select
+                  value={formData.productSector}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, productSector: value })
+                  }
+                  required
+                >
+                  <SelectTrigger id="productSector">
+                    <SelectValue placeholder="Салбарын ангилал сонгох" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productSectors.length === 0 ? (
+                      <SelectItem value="__empty" disabled>
+                        Салбарын ангилал олдсонгүй
+                      </SelectItem>
+                    ) : (
+                      productSectors.map((sector) => (
+                        <SelectItem key={sector.id} value={sector.name}>
+                          {sector.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Main Category Selection - Always show as dropdown (editable) */}
               <div className="grid gap-2">
                 <Label htmlFor="mainCategory">Үндсэн ангилал (Main Category) *</Label>
@@ -1561,7 +1648,7 @@ export default function ProductsPage() {
                 onClick={handleCloseDialog}
                 disabled={isSubmitting}
               >
-                Cancel
+                Хаах
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting 
