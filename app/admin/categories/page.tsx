@@ -877,12 +877,7 @@ export default function CategoriesPage() {
                     onValueChange={(value) => {
                       setSubcategoryFilterMainCategory(value)
                       setSubcategoryFilterCategory("all") // Reset category filter
-                      // Update categories list for the dropdown
-                      if (value !== "all") {
-                        fetchCategories(value)
-                      } else {
-                        fetchCategories()
-                      }
+                    // Categories are derived from main_categories now
                       // Fetch subcategories with new filter
                       const mainCategoryId = value !== "all" ? value : undefined
                       fetchSubcategories(undefined, mainCategoryId)
