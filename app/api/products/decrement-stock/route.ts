@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
 
     const missing: string[] = [];
+    const matched: string[] = [];
     let updatedCount = 0;
 
     await db.runTransaction(async (transaction) => {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
           stock: nextStock,
           updatedAt: now,
         });
+        matched.push(productRef.id);
         updatedCount += 1;
       }
     });
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       count: updatedCount,
+      matched,
       missing,
     });
   } catch (error: any) {

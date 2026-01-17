@@ -3309,6 +3309,9 @@ export default function QuotesPage() {
                       if (!stockResult.success) {
                         throw new Error(stockResult.error || "Failed to update product stock")
                       }
+                      if (stockResult.count === 0) {
+                        alert("Нөөц шинэчлэгдсэнгүй. Барааны код/ID таарахгүй байж магадгүй.")
+                      }
                       if (stockResult.missing && stockResult.missing.length > 0) {
                         console.warn("Missing products for stock update:", stockResult.missing)
                       }

@@ -546,12 +546,8 @@ export default function CategoriesPage() {
       
       if (result.success) {
         alert(`Migration successful! Migrated ${result.mainCategoriesCount} main categories.`);
-        // Refresh all data
-        await Promise.all([
-          fetchMainCategories(),
-          fetchCategories(),
-          fetchSubcategories(),
-        ]);
+        // Refresh main categories only
+        await fetchMainCategories();
       } else {
         alert(result.error || "Failed to migrate categories");
       }
