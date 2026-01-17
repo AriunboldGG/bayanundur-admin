@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const snapshot = await query.get();
-    const subcategories = snapshot.docs.map((doc) => ({
+    const subcategories = snapshot.docs.map((doc: admin.firestore.QueryDocumentSnapshot) => ({
       id: doc.id,
       ...doc.data(),
     }));
