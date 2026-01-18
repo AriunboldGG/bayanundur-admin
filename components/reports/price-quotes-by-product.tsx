@@ -71,7 +71,7 @@ export function PriceQuotesByProductReport({ period }: PriceQuotesByProductRepor
     const exportData = data.map((item) => ({
       "Барааны нэр/Төрөл": item.product,
       "Үнийн санал тоо": item.quotes,
-      "Нийт дүн (₮)": item.totalAmount,
+      "Нийт дүн(₮) (₮)": item.totalAmount,
     }))
     exportToExcel(exportData, `price-quotes-by-product-${period}`, "Price Quotes by Product")
   }
@@ -107,7 +107,7 @@ export function PriceQuotesByProductReport({ period }: PriceQuotesByProductRepor
                 <Tooltip />
                 <Legend />
                 <Bar dataKey="quotes" fill="#8884d8" name="Үнийн санал тоо" />
-                <Bar dataKey="totalAmount" fill="#82ca9d" name="Нийт дүн (₮)" />
+                <Bar dataKey="totalAmount" fill="#82ca9d" name="Нийт дүн(₮) (₮)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -142,7 +142,7 @@ export function PriceQuotesByProductReport({ period }: PriceQuotesByProductRepor
                 <TableRow>
                   <TableHead>Барааны нэр/Төрөл</TableHead>
                   <TableHead className="text-right">Үнийн санал тоо</TableHead>
-                  <TableHead className="text-right">Нийт дүн (₮)</TableHead>
+                  <TableHead className="text-right">Нийт дүн(₮) (₮)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

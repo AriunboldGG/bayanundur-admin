@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2 } from "lucide-react"
+import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2, Mail } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
 import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType } from "docx"
 import { saveAs } from "file-saver"
@@ -617,6 +617,107 @@ export default function QuotesPage() {
     return Number.isFinite(parsed) ? parsed : 0
   }
 
+  const numberToMongolianWords = (value: number): string => {
+    const ones = ["тэг", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес"]
+    const tens = ["", "арав", "хорь", "гуч", "дөч", "тавь", "жаран", "далан", "наян", "ерэн"]
+    const groupNames = ["", "мянга", "сая", "тэрбум", "их наяд"]
+
+    const chunkToWords = (chunk: number) => {
+      const words: string[] = []
+      const hundreds = Math.floor(chunk / 100)
+      const rest = chunk % 100
+
+      if (hundreds) {
+        words.push(ones[hundreds])
+        words.push("зуун")
+      }
+
+      if (rest) {
+        if (rest < 10) {
+          words.push(ones[rest])
+        } else if (rest < 20) {
+          if (rest === 10) {
+            words.push("арав")
+          } else {
+            words.push("арван")
+            words.push(ones[rest - 10])
+          }
+        } else {
+          const tensIndex = Math.floor(rest / 10)
+          words.push(tens[tensIndex])
+          const unit = rest % 10
+          if (unit) words.push(ones[unit])
+        }
+      }
+
+      return words.join(" ")
+    }
+
+    const absolute = Math.floor(Math.abs(value))
+    if (absolute === 0) return "тэг"
+
+    const parts: string[] = []
+    let remaining = absolute
+    let groupIndex = 0
+
+    while (remaining > 0) {
+      const chunk = remaining % 1000
+      if (chunk) {
+        const chunkWords = chunkToWords(chunk)
+        const groupLabel = groupNames[groupIndex]
+        parts.unshift(groupLabel ? `${chunkWords} ${groupLabel}` : chunkWords)
+      }
+      remaining = Math.floor(remaining / 1000)
+      groupIndex += 1
+    }
+
+    return parts.join(" ")
+  }
+
+  const formatAmountInWords = (value: number): string => {
+    const normalized = Math.round(toNumber(value))
+    const words = numberToMongolianWords(Math.abs(normalized))
+    const prefix = normalized < 0 ? "хасах " : ""
+    return `${prefix}${words} төгрөг`
+  }
+
+  const buildMailtoLink = (type: "offer" | "invoice" | "spent") => {
+    const email = selectedQuote?.email || ""
+    if (!email) return ""
+
+    const customerName = `${selectedQuote?.firstName || ""} ${selectedQuote?.lastName || ""}`.trim()
+    const company = selectedQuote?.company || ""
+    const subjectMap = {
+      offer: "Үнийн санал",
+      invoice: "Нэхэмжлэл",
+      spent: "Зарлагын баримт",
+    }
+    const numberMap = {
+      offer: quoteNumber || "",
+      invoice: invoiceNumber || "",
+      spent: spentNumber || "",
+    }
+    const dateMap = {
+      offer: quoteDate || new Date().toISOString().split("T")[0],
+      invoice: invoiceDate || new Date().toISOString().split("T")[0],
+      spent: spentDate || new Date().toISOString().split("T")[0],
+    }
+
+    const subject = `${subjectMap[type]}${numberMap[type] ? ` - ${numberMap[type]}` : ""}`
+    const lines = [
+      `Сайн байна уу${customerName ? `, ${customerName}` : ""}?`,
+      "",
+      `${subjectMap[type]}${numberMap[type] ? ` (${numberMap[type]})` : ""} - ${dateMap[type]}`,
+      company ? `Компани: ${company}` : "",
+      "",
+      "Хүндэтгэсэн,",
+      companyName,
+    ].filter(Boolean)
+
+    const body = lines.join("\n")
+    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }
+
   const handleProductStatusChange = async (
     quoteId: string,
     productId: string,
@@ -755,6 +856,12 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
       (product, index) => selectedForSendOffer.has(getProductKey(product, index))
     )
+    const totalAmount = selectedProducts.reduce((sum, product, index) => {
+      const productId = getProductKey(product, index)
+      const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+      const quantity = toNumber(sendOfferQuantities[productId] ?? product.quantity ?? 0)
+      return sum + unitPrice * quantity
+    }, 0)
 
     const doc = new Document({
       sections: [{
@@ -870,8 +977,9 @@ export default function QuotesPage() {
                   new DocxTableCell({ children: [new Paragraph("Тоо")] }),
                   new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
                   new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
                 ],
               }),
               ...selectedProducts.map((product, index) => {
@@ -916,11 +1024,24 @@ export default function QuotesPage() {
                     new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
                     new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
                     new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
                   ],
                 })
               }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
+              new TextRun({ text: String(totalAmount) }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
+              new TextRun({ text: formatAmountInWords(totalAmount) }),
+            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
@@ -969,6 +1090,13 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
         (product, index) => selectedForInvoice.has(getProductKey(product, index))
       )
+    const totalAmount = selectedProducts.reduce((sum, product, index) => {
+      const productId = getProductKey(product, index)
+      const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+      const unitPrice = toNumber(invoicePrices[productId] ?? fallbackPrice)
+      const quantity = toNumber(invoiceQuantities[productId] ?? product.quantity ?? 0)
+      return sum + unitPrice * quantity
+    }, 0)
 
     const doc = new Document({
       sections: [{
@@ -1096,8 +1224,9 @@ export default function QuotesPage() {
                   new DocxTableCell({ children: [new Paragraph("Тоо")] }),
                   new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
                   new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
                 ],
               }),
               ...selectedProducts.map((product, index) => {
@@ -1143,11 +1272,24 @@ export default function QuotesPage() {
                     new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
                     new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
                     new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
                   ],
                 })
               }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
+              new TextRun({ text: String(totalAmount) }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
+              new TextRun({ text: formatAmountInWords(totalAmount) }),
+            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
@@ -1196,6 +1338,13 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
       (product, index) => selectedForSpent.has(getProductKey(product, index))
     )
+    const totalAmount = selectedProducts.reduce((sum, product, index) => {
+      const productId = getProductKey(product, index)
+      const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+      const unitPrice = toNumber(spentPrices[productId] ?? fallbackPrice)
+      const quantity = toNumber(spentQuantities[productId] ?? product.quantity ?? 0)
+      return sum + unitPrice * quantity
+    }, 0)
 
     const doc = new Document({
       sections: [{
@@ -1311,8 +1460,9 @@ export default function QuotesPage() {
                   new DocxTableCell({ children: [new Paragraph("Тоо")] }),
                   new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
                   new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
+                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
                 ],
               }),
               ...selectedProducts.map((product, index) => {
@@ -1358,11 +1508,24 @@ export default function QuotesPage() {
                     new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
                     new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
                     new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
                   ],
                 })
               }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
+              new TextRun({ text: String(totalAmount) }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
+              new TextRun({ text: formatAmountInWords(totalAmount) }),
+            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
@@ -1678,6 +1841,38 @@ export default function QuotesPage() {
     const fileName = `Үнийн_санал_${quote.firstName}_${quote.lastName}_${quote.id}.xlsx`
     XLSX.writeFile(workbook, fileName)
   }
+
+  const sendOfferTotal = selectedQuote
+    ? selectedQuote.selectedProducts.reduce((sum, product, index) => {
+        if (!selectedForSendOffer.has(getProductKey(product, index))) return sum
+        const productId = getProductKey(product, index)
+        const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+        const quantity = toNumber(sendOfferQuantities[productId] ?? product.quantity ?? 0)
+        return sum + unitPrice * quantity
+      }, 0)
+    : 0
+
+  const invoiceTotal = selectedQuote
+    ? selectedQuote.selectedProducts.reduce((sum, product, index) => {
+        if (!selectedForInvoice.has(getProductKey(product, index))) return sum
+        const productId = getProductKey(product, index)
+        const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+        const unitPrice = toNumber(invoicePrices[productId] ?? fallbackPrice)
+        const quantity = toNumber(invoiceQuantities[productId] ?? product.quantity ?? 0)
+        return sum + unitPrice * quantity
+      }, 0)
+    : 0
+
+  const spentTotal = selectedQuote
+    ? selectedQuote.selectedProducts.reduce((sum, product, index) => {
+        if (!selectedForSpent.has(getProductKey(product, index))) return sum
+        const productId = getProductKey(product, index)
+        const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+        const unitPrice = toNumber(spentPrices[productId] ?? fallbackPrice)
+        const quantity = toNumber(spentQuantities[productId] ?? product.quantity ?? 0)
+        return sum + unitPrice * quantity
+      }, 0)
+    : 0
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -2253,8 +2448,9 @@ export default function QuotesPage() {
                           <TableHead className="text-right">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
                           <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
+                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2331,12 +2527,16 @@ export default function QuotesPage() {
                                     className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                   />
                                 </TableCell>
+                                <TableCell className="min-w-[220px] text-sm">
+                                  {formatAmountInWords(total)}
+                                </TableCell>
                               </TableRow>
                             )
                           })}
                       </TableBody>
                     </Table>
                   </div>
+ 
                 </div>
 
                 {/* Нэмэлт мэдээлэл */}
@@ -2514,6 +2714,17 @@ export default function QuotesPage() {
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const mailto = buildMailtoLink("offer")
+                if (!mailto) return
+                window.location.href = mailto
+              }}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Mail
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2599,8 +2810,9 @@ export default function QuotesPage() {
                           <TableHead className="text-right">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
                           <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
+                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2683,12 +2895,16 @@ export default function QuotesPage() {
                                     className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                   />
                                 </TableCell>
+                                <TableCell className="min-w-[220px] text-sm">
+                                  {formatAmountInWords(total)}
+                                </TableCell>
                               </TableRow>
                             )
                           })}
                       </TableBody>
                     </Table>
                   </div>
+ 
                 </div>
 
                 {/* Нэмэлт мэдээлэл */}
@@ -2924,6 +3140,17 @@ export default function QuotesPage() {
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const mailto = buildMailtoLink("invoice")
+                if (!mailto) return
+                window.location.href = mailto
+              }}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Mail
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3009,8 +3236,9 @@ export default function QuotesPage() {
                           <TableHead className="text-right">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
                           <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн (НӨАТ орсон)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
+                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -3093,12 +3321,16 @@ export default function QuotesPage() {
                                     className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                   />
                                 </TableCell>
+                                <TableCell className="min-w-[220px] text-sm">
+                                  {formatAmountInWords(total)}
+                                </TableCell>
                               </TableRow>
                             )
                           })}
                       </TableBody>
                     </Table>
                   </div>
+ 
                 </div>
 
                 {/* Нэмэлт мэдээлэл */}
@@ -3188,6 +3420,17 @@ export default function QuotesPage() {
             >
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const mailto = buildMailtoLink("spent")
+                if (!mailto) return
+                window.location.href = mailto
+              }}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Mail
             </Button>
             <Button variant="outline" onClick={() => setIsSpentDialogOpen(false)}>
               Хаах 
