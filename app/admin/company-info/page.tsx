@@ -21,7 +21,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2 } from "lucide-react"
 
 type CompanyInfoItem = {
   id: string
@@ -222,7 +222,13 @@ export default function CompanyInfoPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          if (isSaving) return
+          setIsDialogOpen(open)
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Company Info" : "Create Company Info"}</DialogTitle>
@@ -295,11 +301,22 @@ export default function CompanyInfoPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save"}
+            <Button onClick={handleSave} disabled={isSaving} aria-busy={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
