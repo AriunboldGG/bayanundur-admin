@@ -34,16 +34,148 @@ interface QuotesAnalysisReportProps {
 interface ChartData {
   date: string
   quotes: number
-  sentOffer: number
-  createInvoice: number
-  spent: number
-  pending: number
+  [key: string]: string | number
 }
+
+const statusLabels: Record<string, string> = {
+  sent_offer: "Үнийн санал",
+  create_invoice: "Нэхэмжлэх",
+  spent: "Зарцуулсан",
+  pending: "Хүлээгдэж буй",
+}
+
+const statusTextColors: Record<string, string> = {
+  sent_offer: "text-blue-600",
+  create_invoice: "text-green-600",
+  spent: "text-orange-600",
+  pending: "text-gray-600",
+}
+
+const statusChartColors: Record<string, string> = {
+  sent_offer: "#82ca9d",
+  create_invoice: "#0088fe",
+  spent: "#ffc658",
+  pending: "#ff7300",
+}
+
+const fallbackChartColors = ["#8884d8", "#00c49f", "#ff8042", "#a855f7", "#22c55e"]
 
 export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
   const [quotes, setQuotes] = useState<PriceQuote[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+
+  const getStatusLabel = (status: string) => statusLabels[status] || status
+
+  const getChartColor = (status: string, index: number) =>
+    statusChartColors[status] || fallbackChartColors[index % fallbackChartColors.length]
+
+  const normalizeStatus = (status?: string) => status || "pending"
+
+  const getQuoteStatus = (quote: PriceQuote) => {
+    const products = quote.selectedProducts || []
+    if (products.length === 0) {
+      return normalizeStatus(quote.status)
+    }
+
+    const normalizedStatuses = products.map((product) =>
+      normalizeStatus(product.status || (product as any).status_type)
+    )
+
+    const allSpent = normalizedStatuses.every((status) => status === "spent")
+    if (allSpent) return "spent"
+
+    const allInvoiceOrSpent = normalizedStatuses.every(
+      (status) => status === "create_invoice" || status === "spent"
+    )
+    if (allInvoiceOrSpent) return "create_invoice"
+
+    const hasStatus = normalizedStatuses.some((status) => status !== "pending")
+    if (hasStatus) return "sent_offer"
+
+    return "pending"
+  }
+
+  const filteredQuotes = useMemo(() => {
+    if (!quotes.length) return []
+    const now = new Date()
+    let periodStartDate: Date
+
+    switch (period) {
+      case "month":
+        periodStartDate = new Date(now.getFullYear(), now.getMonth() - 5, 1) // Last 6 months
+        break
+      case "halfyear":
+        periodStartDate = new Date(now.getFullYear() - 1, now.getMonth(), 1) // Last year
+        break
+      case "year":
+        periodStartDate = new Date(now.getFullYear() - 1, 0, 1) // Last 2 years
+        break
+      default:
+        periodStartDate = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+    }
+
+    const rangeStart = startDate ? new Date(startDate) : null
+    if (rangeStart) rangeStart.setHours(0, 0, 0, 0)
+    const rangeEnd = endDate ? new Date(endDate) : null
+    if (rangeEnd) rangeEnd.setHours(23, 59, 59, 999)
+
+    return quotes.filter((quote) => {
+      const quoteDate = new Date(quote.createdAt)
+      if (quoteDate < periodStartDate) return false
+      if (rangeStart && quoteDate < rangeStart) return false
+      if (rangeEnd && quoteDate > rangeEnd) return false
+      return true
+    })
+  }, [quotes, period, startDate, endDate])
+
+  const { statusCounts, statusKeys } = useMemo(() => {
+    const counts: Record<string, number> = {}
+    filteredQuotes.forEach((quote) => {
+      const status = getQuoteStatus(quote)
+      counts[status] = (counts[status] || 0) + 1
+    })
+
+    const orderedKeys = ["sent_offer", "create_invoice", "spent", "pending"]
+    const remainingKeys = Object.keys(counts)
+      .filter((key) => !orderedKeys.includes(key))
+      .sort((a, b) => a.localeCompare(b))
+    const keys = orderedKeys.filter((key) => counts[key]).concat(remainingKeys)
+
+    return { statusCounts: counts, statusKeys: keys }
+  }, [filteredQuotes])
+
+  const productData = useMemo(() => {
+    const grouped: Record<string, { product: string; quotes: number; quantity: number }> = {}
+    filteredQuotes.forEach((quote) => {
+      quote.selectedProducts?.forEach((product) => {
+        const name = product.productName || "Unknown Product"
+        if (!grouped[name]) {
+          grouped[name] = { product: name, quotes: 0, quantity: 0 }
+        }
+        grouped[name].quotes += 1
+        grouped[name].quantity += Number(product.quantity || 0)
+      })
+    })
+    return Object.values(grouped).sort((a, b) => b.quotes - a.quotes)
+  }, [filteredQuotes])
+
+  const companyData = useMemo(() => {
+    const grouped: Record<string, { company: string; quotes: number }> = {}
+    filteredQuotes.forEach((quote) => {
+      const company = quote.company || "Unknown Company"
+      if (!grouped[company]) {
+        grouped[company] = { company, quotes: 0 }
+      }
+      grouped[company].quotes += 1
+    })
+    return Object.values(grouped).sort((a, b) => b.quotes - a.quotes)
+  }, [filteredQuotes])
+
+  const topProductData = useMemo(() => productData.slice(0, 10), [productData])
+  const topCompanyData = useMemo(() => companyData.slice(0, 10), [companyData])
 
   useEffect(() => {
     fetchQuotes()
@@ -71,37 +203,24 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
 
   // Process quotes data based on period
   const chartData = useMemo(() => {
-    if (!quotes.length) return []
+    if (!filteredQuotes.length) return []
 
-    const now = new Date()
-    let startDate: Date
     let groupBy: "month" | "quarter" | "year"
 
     switch (period) {
       case "month":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1) // Last 6 months
         groupBy = "month"
         break
       case "halfyear":
-        startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1) // Last year
         groupBy = "quarter"
         break
       case "year":
-        startDate = new Date(now.getFullYear() - 1, 0, 1) // Last 2 years
         groupBy = "year"
         break
       default:
-        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1)
         groupBy = "month"
     }
 
-    // Filter quotes by date
-    const filteredQuotes = quotes.filter((quote) => {
-      const quoteDate = new Date(quote.createdAt)
-      return quoteDate >= startDate
-    })
-
-    // Group quotes by period
     const grouped: Record<string, ChartData> = {}
 
     filteredQuotes.forEach((quote) => {
@@ -129,10 +248,6 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
           grouped[key] = {
             date: displayKey,
             quotes: 0,
-            sentOffer: 0,
-            createInvoice: 0,
-            spent: 0,
-            pending: 0,
           }
         }
       } else if (groupBy === "quarter") {
@@ -143,10 +258,6 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
           grouped[key] = {
             date: displayKey,
             quotes: 0,
-            sentOffer: 0,
-            createInvoice: 0,
-            spent: 0,
-            pending: 0,
           }
         }
       } else {
@@ -155,43 +266,33 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
           grouped[key] = {
             date: key,
             quotes: 0,
-            sentOffer: 0,
-            createInvoice: 0,
-            spent: 0,
-            pending: 0,
           }
         }
       }
 
-      grouped[key].quotes++
-      if (quote.status === "sent_offer") {
-        grouped[key].sentOffer++
-      } else if (quote.status === "create_invoice") {
-        grouped[key].createInvoice++
-      } else if (quote.status === "spent") {
-        grouped[key].spent++
-      } else {
-        grouped[key].pending++
-      }
+      const status = getQuoteStatus(quote)
+      grouped[key].quotes = (grouped[key].quotes as number) + 1
+      grouped[key][status] = ((grouped[key][status] as number) || 0) + 1
     })
 
-    // Sort by date
     return Object.values(grouped).sort((a, b) => {
       const dateA = a.date
       const dateB = b.date
       return dateA.localeCompare(dateB)
     })
-  }, [quotes, period])
+  }, [filteredQuotes, period])
 
   const handleExport = () => {
-    const exportData = chartData.map((item) => ({
-      Огноо: item.date,
-      "Үнийн санал": item.quotes,
-      "Илгээсэн санал": item.sentOffer,
-      "Нэхэмжлэх": item.createInvoice,
-      "Зарцуулсан": item.spent,
-      "Хүлээгдэж буй": item.pending,
-    }))
+    const exportData = chartData.map((item) => {
+      const row: Record<string, string | number> = {
+        Огноо: item.date,
+        "Үнийн санал": item.quotes,
+      }
+      statusKeys.forEach((status) => {
+        row[getStatusLabel(status)] = (item[status] as number) || 0
+      })
+      return row
+    })
     exportToExcel(exportData, `quotes-analysis-${period}`, "Quotes Analysis")
   }
 
@@ -223,12 +324,38 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle>Үнийн саналын шинжилгээ</CardTitle>
-              <CardDescription>
-                View quotes analysis over different time periods (
-                {period === "month" ? "Сар" : period === "halfyear" ? "Хагас жил" : "Жил"})
-              </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Эхлэх:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Дуусах:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    setStartDate("")
+                    setEndDate("")
+                  }}
+                >
+                  Цэвэрлэх
+                </Button>
+              )}
             </div>
             <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
               <Download className="mr-2 h-4 w-4" />
@@ -239,72 +366,37 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
         <CardContent className="space-y-6">
           {/* Status Counts Summary */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Үнийн саналын тооллого</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <h3 className="text-lg font-semibold mb-4">Үнийн саналын мэдээлэл</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-3xl font-bold">{quotes.length}</div>
+                  <div className="text-3xl font-bold">{filteredQuotes.length}</div>
                   <p className="text-sm text-muted-foreground mt-2">Нийт үнийн санал</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-3xl font-bold text-blue-600">
-                    {quotes.filter((q) => q.status === "sent_offer").length}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">Илгээсэн санал</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ({quotes.length > 0 
-                      ? Math.round((quotes.filter((q) => q.status === "sent_offer").length / quotes.length) * 100)
-                      : 0}%)
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-3xl font-bold text-green-600">
-                    {quotes.filter((q) => q.status === "create_invoice").length}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">Нэхэмжлэх</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ({quotes.length > 0 
-                      ? Math.round((quotes.filter((q) => q.status === "create_invoice").length / quotes.length) * 100)
-                      : 0}%)
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-3xl font-bold text-orange-600">
-                    {quotes.filter((q) => q.status === "spent").length}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">Зарцуулсан</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ({quotes.length > 0 
-                      ? Math.round((quotes.filter((q) => q.status === "spent").length / quotes.length) * 100)
-                      : 0}%)
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-3xl font-bold text-gray-600">
-                    {quotes.filter((q) => q.status === "pending" || !q.status).length}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">Хүлээгдэж буй</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ({quotes.length > 0 
-                      ? Math.round((quotes.filter((q) => q.status === "pending" || !q.status).length / quotes.length) * 100)
-                      : 0}%)
-                  </p>
-                </CardContent>
-              </Card>
+              {statusKeys.map((status) => {
+                const count = statusCounts[status] || 0
+                const percent = filteredQuotes.length
+                  ? Math.round((count / filteredQuotes.length) * 100)
+                  : 0
+                return (
+                  <Card key={status}>
+                    <CardContent className="pt-6">
+                      <div className={`text-3xl font-bold ${statusTextColors[status] || ""}`}>
+                        {count}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">{getStatusLabel(status)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">({percent}%)</p>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           </div>
 
           {/* Status Breakdown Table */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Үнийн саналын тооллого</h3>
+            <h3 className="text-lg font-semibold mb-4">Үнийн саналын мэдээлэл</h3>
             <Card>
               <CardContent className="pt-6">
                 <div className="overflow-x-auto">
@@ -319,53 +411,23 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                     <TableBody>
                       <TableRow>
                         <TableCell className="font-medium">Нийт үнийн санал</TableCell>
-                        <TableCell className="text-center font-bold text-lg">{quotes.length}</TableCell>
+                        <TableCell className="text-center font-bold text-lg">{filteredQuotes.length}</TableCell>
                         <TableCell className="text-center">100%</TableCell>
                       </TableRow>
-                      <TableRow>
-                        <TableCell className="font-medium text-blue-600">Илгээсэн санал (Sent Offer)</TableCell>
-                        <TableCell className="text-center font-bold text-lg text-blue-600">
-                          {quotes.filter((q) => q.status === "sent_offer").length}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quotes.length > 0 
-                            ? Math.round((quotes.filter((q) => q.status === "sent_offer").length / quotes.length) * 100)
-                            : 0}%
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-medium text-green-600">Нэхэмжлэх үүсгэсэн (Invoice Created)</TableCell>
-                        <TableCell className="text-center font-bold text-lg text-green-600">
-                          {quotes.filter((q) => q.status === "create_invoice").length}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quotes.length > 0 
-                            ? Math.round((quotes.filter((q) => q.status === "create_invoice").length / quotes.length) * 100)
-                            : 0}%
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-medium text-orange-600">Зарцуулсан (Зарлагын баримт)</TableCell>
-                        <TableCell className="text-center font-bold text-lg text-orange-600">
-                          {quotes.filter((q) => q.status === "spent").length}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quotes.length > 0 
-                            ? Math.round((quotes.filter((q) => q.status === "spent").length / quotes.length) * 100)
-                            : 0}%
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-medium text-gray-600">Хүлээгдэж буй (Pending)</TableCell>
-                        <TableCell className="text-center font-bold text-lg text-gray-600">
-                          {quotes.filter((q) => q.status === "pending" || !q.status).length}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quotes.length > 0 
-                            ? Math.round((quotes.filter((q) => q.status === "pending" || !q.status).length / quotes.length) * 100)
-                            : 0}%
-                        </TableCell>
-                      </TableRow>
+                      {statusKeys.map((status) => {
+                        const count = statusCounts[status] || 0
+                        const percent = filteredQuotes.length
+                          ? Math.round((count / filteredQuotes.length) * 100)
+                          : 0
+                        const textClass = statusTextColors[status] || ""
+                        return (
+                          <TableRow key={status}>
+                            <TableCell className={`font-medium ${textClass}`}>{getStatusLabel(status)}</TableCell>
+                            <TableCell className={`text-center font-bold text-lg ${textClass}`}>{count}</TableCell>
+                            <TableCell className="text-center">{percent}%</TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -391,34 +453,16 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                       name="Нийт үнийн санал"
                       strokeWidth={2}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="sentOffer"
-                      stroke="#82ca9d"
-                      name="Илгээсэн санал"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="createInvoice"
-                      stroke="#0088fe"
-                      name="Нэхэмжлэх"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="spent"
-                      stroke="#ffc658"
-                      name="Зарцуулсан"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="pending"
-                      stroke="#ff7300"
-                      name="Хүлээгдэж буй"
-                      strokeWidth={2}
-                    />
+                    {statusKeys.map((status, index) => (
+                      <Line
+                        key={status}
+                        type="monotone"
+                        dataKey={status}
+                        stroke={getChartColor(status, index)}
+                        name={getStatusLabel(status)}
+                        strokeWidth={2}
+                      />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -433,10 +477,14 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="quotes" fill="#8884d8" name="Нийт үнийн санал" />
-                    <Bar dataKey="sentOffer" fill="#82ca9d" name="Илгээсэн санал" />
-                    <Bar dataKey="createInvoice" fill="#0088fe" name="Нэхэмжлэх" />
-                    <Bar dataKey="spent" fill="#ffc658" name="Зарцуулсан" />
-                    <Bar dataKey="pending" fill="#ff7300" name="Хүлээгдэж буй" />
+                    {statusKeys.map((status, index) => (
+                      <Bar
+                        key={status}
+                        dataKey={status}
+                        fill={getChartColor(status, index)}
+                        name={getStatusLabel(status)}
+                      />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -448,10 +496,11 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                     <TableRow>
                       <TableHead>Огноо/Хугацаа</TableHead>
                       <TableHead className="text-right">Нийт үнийн санал</TableHead>
-                      <TableHead className="text-right">Илгээсэн санал</TableHead>
-                      <TableHead className="text-right">Нэхэмжлэх</TableHead>
-                      <TableHead className="text-right">Зарцуулсан</TableHead>
-                      <TableHead className="text-right">Хүлээгдэж буй</TableHead>
+                      {statusKeys.map((status) => (
+                        <TableHead key={status} className="text-right">
+                          {getStatusLabel(status)}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -459,10 +508,11 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
                       <TableRow key={index}>
                         <TableCell className="font-medium">{row.date}</TableCell>
                         <TableCell className="text-right">{row.quotes}</TableCell>
-                        <TableCell className="text-right">{row.sentOffer}</TableCell>
-                        <TableCell className="text-right">{row.createInvoice}</TableCell>
-                        <TableCell className="text-right">{row.spent}</TableCell>
-                        <TableCell className="text-right">{row.pending}</TableCell>
+                        {statusKeys.map((status) => (
+                          <TableCell key={status} className="text-right">
+                            {(row[status] as number) || 0}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -470,6 +520,103 @@ export function QuotesAnalysisReport({ period }: QuotesAnalysisReportProps) {
               </div>
             </>
           )}
+
+          {/* Quotes by Product */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Үнийн саналын бараагаар</h3>
+            <Card>
+              <CardContent className="pt-6 space-y-6">
+                {productData.length > 0 ? (
+                  <>
+                    <div className="h-[400px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={topProductData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="product" angle={-25} textAnchor="end" height={90} />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="quotes" fill="#8884d8" name="Үнийн санал тоо" />
+                          <Bar dataKey="quantity" fill="#82ca9d" name="Нийт тоо хэмжээ" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Барааны нэр</TableHead>
+                            <TableHead className="text-right">Үнийн санал тоо</TableHead>
+                            <TableHead className="text-right">Нийт тоо хэмжээ</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productData.map((item) => (
+                            <TableRow key={item.product}>
+                              <TableCell className="font-medium">{item.product}</TableCell>
+                              <TableCell className="text-right">{item.quotes}</TableCell>
+                              <TableCell className="text-right">{item.quantity}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Өгөгдөл олдсонгүй</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quotes by Company */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Үнийн саналын компаниар</h3>
+            <Card>
+              <CardContent className="pt-6 space-y-6">
+                {companyData.length > 0 ? (
+                  <>
+                    <div className="h-[400px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={topCompanyData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="company" angle={-25} textAnchor="end" height={90} />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="quotes" fill="#8884d8" name="Үнийн санал тоо" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Компани</TableHead>
+                            <TableHead className="text-right">Үнийн санал тоо</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {companyData.map((item) => (
+                            <TableRow key={item.company}>
+                              <TableCell className="font-medium">{item.company}</TableCell>
+                              <TableCell className="text-right">{item.quotes}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Өгөгдөл олдсонгүй</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           {chartData.length === 0 && !isLoading && (
             <div className="text-center py-8 text-muted-foreground">
