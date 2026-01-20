@@ -1245,7 +1245,7 @@ export default function ProductsPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="brand">Брэнд (Brand) *</Label>
                       <Input
@@ -1369,7 +1369,7 @@ export default function ProductsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="size">Хэмжээ (Size) *</Label>
                       <div className="flex gap-2">
@@ -1466,7 +1466,7 @@ export default function ProductsPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="modelNumber">Модел дугаар (Model Number)</Label>
                       <Input
@@ -1629,7 +1629,7 @@ export default function ProductsPage() {
 
                       {/* Image Previews */}
                       {imagePreviews.length > 0 && (
-                        <div className="grid grid-cols-5 gap-2 mt-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
                           {imagePreviews.map((preview, index) => (
                             <div key={index} className="relative group">
                               <img

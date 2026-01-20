@@ -167,7 +167,6 @@ export async function GET(request: NextRequest) {
           email: data.email || "",
           phone: data.phone || "",
           additionalInfo: additionalInfo, // Map both 'note' and 'additionalInfo' to 'additionalInfo'
-          position: data.position || "",
           company: data.company || "",
           companyNote: data.companyNote || "",
           companyAddress: data.companyAddress || "",
@@ -271,7 +270,6 @@ export async function POST(request: NextRequest) {
       email: quoteData.email,
       phone: quoteData.phone || "",
       additionalInfo: quoteData.additionalInfo || "",
-      position: quoteData.position || "",
       company: quoteData.company,
       selectedProducts: quoteData.selectedProducts || [],
       status: quoteData.status || "pending",

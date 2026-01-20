@@ -106,7 +106,6 @@ export async function GET(
       email: data?.email || "",
       phone: data?.phone || "",
       additionalInfo: additionalInfo, // Map both 'note' and 'additionalInfo' to 'additionalInfo'
-      position: data?.position || "",
       company: data?.company || "",
       companyNote: data?.companyNote || "",
       companyAddress: data?.companyAddress || "",
@@ -181,7 +180,6 @@ export async function PUT(
     addField("email", quoteData.email);
     addField("phone", quoteData.phone);
     addField("additionalInfo", quoteData.additionalInfo);
-    addField("position", quoteData.position);
     addField("company", quoteData.company);
     addField("companyNote", quoteData.companyNote);
     addField("companyAddress", quoteData.companyAddress);

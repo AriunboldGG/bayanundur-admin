@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select"
 import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2, Mail } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
-import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType } from "docx"
+import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType, BorderStyle } from "docx"
 import { saveAs } from "file-saver"
 
 // Mock data removed - now fetching from Firebase
@@ -77,6 +77,7 @@ export default function QuotesPage() {
   const [invoiceDeliveryTimes, setInvoiceDeliveryTimes] = useState<Record<string, string>>({})
   const [invoiceNumber, setInvoiceNumber] = useState<string>("")
   const [invoiceDate, setInvoiceDate] = useState<string>("")
+  const [paymentDueDate, setPaymentDueDate] = useState<string>("")
   const [spentPrices, setSpentPrices] = useState<Record<string, string>>({})
   const [spentQuantities, setSpentQuantities] = useState<Record<string, number>>({})
   const [spentDeliveryTimes, setSpentDeliveryTimes] = useState<Record<string, string>>({})
@@ -198,6 +199,7 @@ export default function QuotesPage() {
       // Use saved invoice number/date if available, otherwise generate new
       const savedInvoiceNumber = (selectedQuote as any).invoiceNumber || ""
       const savedInvoiceDate = (selectedQuote as any).invoiceDate || ""
+      const savedPaymentDueDate = (selectedQuote as any).paymentDueDate || ""
       if (savedInvoiceNumber) {
         setInvoiceNumber(savedInvoiceNumber)
       } else {
@@ -214,9 +216,13 @@ export default function QuotesPage() {
       if (savedInvoiceDate) {
         setInvoiceDate(savedInvoiceDate)
       }
+      if (savedPaymentDueDate) {
+        setPaymentDueDate(savedPaymentDueDate)
+      }
     } else if (!isCreateInvoiceDialogOpen) {
       setInvoiceNumber("")
       setInvoiceDate("")
+      setPaymentDueDate("")
       setInvoiceQuantities({})
       setInvoiceDeliveryTimes({})
     }
@@ -613,7 +619,8 @@ export default function QuotesPage() {
     if (typeof value === "number") {
       return Number.isFinite(value) ? value : 0
     }
-    const parsed = parseFloat(String(value))
+    const sanitized = String(value).replace(/[^0-9.-]/g, "")
+    const parsed = parseFloat(sanitized)
     return Number.isFinite(parsed) ? parsed : 0
   }
 
@@ -856,6 +863,14 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
       (product, index) => selectedForSendOffer.has(getProductKey(product, index))
     )
+    const sendOfferColumnWidths = [5, 22, 14, 10, 6, 12, 12, 19]
+    const sendOfferCell = (text: string | number, colIndex: number) =>
+      new DocxTableCell({
+        children: [new Paragraph(String(text))],
+        width: { size: sendOfferColumnWidths[colIndex], type: WidthType.PERCENTAGE },
+      })
+    const resolvedQuoteNumber =
+      quoteNumber || `BU-QT-${new Date().toISOString().split("T")[0]}-001`
     const totalAmount = selectedProducts.reduce((sum, product, index) => {
       const productId = getProductKey(product, index)
       const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
@@ -864,130 +879,189 @@ export default function QuotesPage() {
     }, 0)
 
     const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              size: 24,
+              color: "000000",
+            },
+          },
+        },
+      },
       sections: [{
         children: [
           new Paragraph({
-            text: "Үнийн санал илгээх форм",
-            heading: "Heading1",
+            children: [
+              new TextRun({
+                text: `ҮНИЙН САНАЛ № ${resolvedQuoteNumber}`,
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
+            ],
             alignment: AlignmentType.CENTER,
           }),
           new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Үнийн саналын дугаар: ", bold: true }),
-              new TextRun({ text: quoteNumber || `BU-QT-${new Date().toISOString().split("T")[0]}-001` }),
-            ],
-          }),
           new Paragraph({
             children: [
               new TextRun({ text: "Огноо: ", bold: true }),
               new TextRun({ text: quoteDate ? formatDate(quoteDate) : formatDate(selectedQuote.createdAt) }),
             ],
           }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
-              new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Албан тушаал: ", bold: true }),
-              new TextRun({ text: selectedQuote.position || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Компани: ", bold: true }),
-              new TextRun({ text: selectedQuote.company }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: buyerRegNumber || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
-              new TextRun({ text: selectedQuote.additionalInfo || "" }),
-            ],
-          }),
           new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Үнийн санал илгээгч компанийн мэдээлэл",
-            heading: "Heading2",
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн нэр: ", bold: true }),
-              new TextRun({ text: companyName }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: companyRegNumber }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Хаяг: ", bold: true }),
-              new TextRun({ text: companyAddress }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Email: ", bold: true }),
-              new TextRun({ text: companyEmail }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Утас, Факс: ", bold: true }),
-              new TextRun({ text: companyPhone }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Гар утас: ", bold: true }),
-              new TextRun({ text: companyMobile }),
-            ],
-          }),
-          ...(companyNote ? [new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
-              new TextRun({ text: companyNote }),
-            ],
-          })] : []),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Сонгосон бараа",
-            heading: "Heading2",
-          }),
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
-                  new DocxTableCell({ children: [new Paragraph("№")] }),
-                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
-                  new DocxTableCell({ children: [new Paragraph("Код")] }),
-                  new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
-                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
-                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Үнийн санал хүсгэгч:",
+                            bold: true,
+                            size: 28,
+                            color: "000000",
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Компани: ", bold: true }),
+                          new TextRun({ text: selectedQuote.company }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Хариуцсан ажилтны нэр: ", bold: true }),
+                          new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Утас: ", bold: true }),
+                          new TextRun({ text: selectedQuote.phone || "-" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
+                          new TextRun({ text: selectedQuote.additionalInfo || "" }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Үнийн санал илгээгч:",
+                            bold: true,
+                            size: 28,
+                            color: "000000",
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Компанийн нэр: ", bold: true }),
+                          new TextRun({ text: companyName }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Регистерийн №: ", bold: true }),
+                          new TextRun({ text: companyRegNumber }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Хаяг: ", bold: true }),
+                          new TextRun({ text: companyAddress }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Email: ", bold: true }),
+                          new TextRun({ text: companyEmail }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Утас, Факс: ", bold: true }),
+                          new TextRun({ text: companyPhone }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Гар утас: ", bold: true }),
+                          new TextRun({ text: companyMobile }),
+                        ],
+                      }),
+                      ...(companyNote ? [new Paragraph({
+                        children: [
+                          new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
+                          new TextRun({ text: companyNote }),
+                        ],
+                      })] : []),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Сонгосон бараа",
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
+            ],
+          }),
+          new DocxTable({
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  sendOfferCell("№", 0),
+                  sendOfferCell("Барааны нэр", 1),
+                  sendOfferCell("Код", 2),
+                  sendOfferCell("Хэмжих нэгж", 3),
+                  sendOfferCell("Тоо", 4),
+                  sendOfferCell("Барааны төлөв", 5),
+                  sendOfferCell("Нэгжийн үнэ(₮)", 6),
+                  sendOfferCell("Нийт дүн(₮)(НӨАТ орсон)", 7),
                 ],
               }),
               ...selectedProducts.map((product, index) => {
                 const productId = getProductKey(product, index)
-                const unitPrice = (product as any).price || (product as any).priceNum || 0
+                const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
                 const quantity = sendOfferQuantities[productId] !== undefined 
                   ? sendOfferQuantities[productId] 
-                  : (product.quantity || 0)
+                  : toNumber(product.quantity || 0)
                 const total = unitPrice * quantity
                 const productCode = (product as any).product_code || (product as any).productCode || ""
                 const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
@@ -1015,39 +1089,55 @@ export default function QuotesPage() {
                 
                 return new DocxTableRow({
                   children: [
-                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
-                    new DocxTableCell({ children: [new Paragraph(transactionDescription)] }),
-                    new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
-                    new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
-                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
-                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
-                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
+                    sendOfferCell(index + 1, 0),
+                    sendOfferCell(transactionDescription, 1),
+                    sendOfferCell(productCode || "-", 2),
+                    sendOfferCell(unitOfMeasurement, 3),
+                    sendOfferCell(quantity, 4),
+                    sendOfferCell(statusLabel, 5),
+                    sendOfferCell(unitPrice, 6),
+                    sendOfferCell(total, 7),
                   ],
                 })
               }),
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    columnSpan: 7,
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: "НИЙТ ДҮН", bold: true })],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                      }),
+                    ],
+                    width: { size: sendOfferColumnWidths[7], type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
-              new TextRun({ text: String(totalAmount) }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
-              new TextRun({ text: formatAmountInWords(totalAmount) }),
-            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           // Stamp and Signature Section
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
@@ -1090,6 +1180,8 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
         (product, index) => selectedForInvoice.has(getProductKey(product, index))
       )
+    const resolvedInvoiceNumber =
+      invoiceNumber || `BU-INV-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`
     const totalAmount = selectedProducts.reduce((sum, product, index) => {
       const productId = getProductKey(product, index)
       const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
@@ -1099,134 +1191,237 @@ export default function QuotesPage() {
     }, 0)
 
     const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              size: 24,
+              color: "000000",
+            },
+          },
+        },
+      },
       sections: [{
         children: [
-          new Paragraph({
-            text: "НЭХЭМЖЛЭЛ ",
-            heading: "Heading1",
-            alignment: AlignmentType.CENTER,
+          new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: "НХМаягт БМ-3" })],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [
+                          new TextRun({
+                            text: "Сангийн сайдын 2017 оны  ....тоот тушаалын хавсралт",
+                          }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Нэхэмжлэлийн дугаар: ", bold: true }),
-              new TextRun({ text: invoiceNumber || `BU-INV-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001` }),
+              new TextRun({
+                text: `НЭХЭМЖЛЭЛ № ${resolvedInvoiceNumber}`,
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
             ],
+            alignment: AlignmentType.CENTER,
           }),
+          new Paragraph({ text: "" }),
           new Paragraph({
             children: [
               new TextRun({ text: "Огноо: ", bold: true }),
               new TextRun({ text: invoiceDate ? formatDate(invoiceDate) : formatDate(selectedQuote.createdAt) }),
             ],
           }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
-              new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
+          new Paragraph({ text: "" }),
+          new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Төлөгч:",
+                            bold: true,
+                            size: 28,
+                            color: "000000",
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
+                          new TextRun({ text: selectedQuote.company }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Хаяг: ", bold: true }),
+                          new TextRun({ text: "-" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Гэрээний дугаар: ", bold: true }),
+                          new TextRun({ text: "-" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Нэхэмжилсэн огноо: ", bold: true }),
+                          new TextRun({ text: invoiceDate ? formatDate(invoiceDate) : formatDate(selectedQuote.createdAt) }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Төлбөр төлөх хугацаа: ", bold: true }),
+                          new TextRun({ text: paymentDueDate ? formatDate(paymentDueDate) : "-" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Регистерийн №: ", bold: true }),
+                          new TextRun({ text: buyerRegNumber || "-" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Гүйлгээний утга: ", bold: true }),
+                          new TextRun({ text: resolvedInvoiceNumber }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Нэхэмжлэгч:",
+                            bold: true,
+                            size: 28,
+                            color: "000000",
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Байгууллагын нэр: ", bold: true }),
+                          new TextRun({ text: companyName }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Хаяг: ", bold: true }),
+                          new TextRun({ text: companyAddress }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Email: ", bold: true }),
+                          new TextRun({ text: companyEmail }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Утас, Факс: ", bold: true }),
+                          new TextRun({ text: companyPhone }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Банкны нэр: ", bold: true }),
+                          new TextRun({ text: companyBankName }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Дансны дугаар: ", bold: true }),
+                          new TextRun({ text: companyAccountNumber }),
+                        ],
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Регистерийн №: ", bold: true }),
+                          new TextRun({ text: companyRegNumber }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
             ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Албан тушаал: ", bold: true }),
-              new TextRun({ text: selectedQuote.position || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Компани: ", bold: true }),
-              new TextRun({ text: selectedQuote.company }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: buyerRegNumber || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
-              new TextRun({ text: selectedQuote.additionalInfo || "" }),
-            ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
-            text: "Нэхэмжлэл илгээгч компанийн мэдээлэл",
-            heading: "Heading2",
-          }),
-          new Paragraph({
             children: [
-              new TextRun({ text: "Компанийн нэр: ", bold: true }),
-              new TextRun({ text: companyName }),
+              new TextRun({
+                text: "Сонгосон бараа",
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
             ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: companyRegNumber }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Банкны нэр: ", bold: true }),
-              new TextRun({ text: companyBankName }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Дансны дугаар: ", bold: true }),
-              new TextRun({ text: companyAccountNumber }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Хаяг: ", bold: true }),
-              new TextRun({ text: companyAddress }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Email: ", bold: true }),
-              new TextRun({ text: companyEmail }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Утас, Факс: ", bold: true }),
-              new TextRun({ text: companyPhone }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Гар утас: ", bold: true }),
-              new TextRun({ text: companyMobile }),
-            ],
-          }),
-          ...(companyNote ? [new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
-              new TextRun({ text: companyNote }),
-            ],
-          })] : []),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Сонгосон бараа",
-            heading: "Heading2",
           }),
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
                   new DocxTableCell({ children: [new Paragraph("№")] }),
-                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
+                  new DocxTableCell({ children: [new Paragraph("Барааны нэр")] }),
                   new DocxTableCell({ children: [new Paragraph("Код")] }),
                   new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
                   new DocxTableCell({ children: [new Paragraph("Тоо")] }),
-                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
                   new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
                   new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
                 ],
               }),
               ...selectedProducts.map((product, index) => {
@@ -1239,28 +1434,7 @@ export default function QuotesPage() {
                 const total = unitPrice * quantity
                 const productCode = (product as any).product_code || (product as any).productCode || ""
                 const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
-                const deliveryTime = invoiceDeliveryTimes[productId] !== undefined
-                  ? invoiceDeliveryTimes[productId]
-                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
                 const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
-                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
-                const statusLabel = stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock
-                
-                // Format delivery time date if it exists
-                let deliveryTimeDisplay = "-"
-                if (deliveryTime) {
-                  try {
-                    const date = new Date(deliveryTime)
-                    if (!isNaN(date.getTime())) {
-                      deliveryTimeDisplay = date.toLocaleDateString("mn-MN")
-                    } else {
-                      deliveryTimeDisplay = deliveryTime
-                    }
-                  } catch {
-                    deliveryTimeDisplay = deliveryTime
-                  }
-                }
-                
                 return new DocxTableRow({
                   children: [
                     new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
@@ -1268,34 +1442,48 @@ export default function QuotesPage() {
                     new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
                     new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
                     new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
-                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
                     new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
                     new DocxTableCell({ children: [new Paragraph(String(total))] }),
-                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
                   ],
                 })
               }),
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    columnSpan: 6,
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: "НИЙТ ДҮН", bold: true })],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
-              new TextRun({ text: String(totalAmount) }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
-              new TextRun({ text: formatAmountInWords(totalAmount) }),
-            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           // Stamp and Signature Section
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
@@ -1338,6 +1526,14 @@ export default function QuotesPage() {
     const selectedProducts = selectedQuote.selectedProducts.filter(
       (product, index) => selectedForSpent.has(getProductKey(product, index))
     )
+    const spentColumnWidths = [5, 24, 16, 10, 6, 12, 27]
+    const spentCell = (text: string | number, colIndex: number) =>
+      new DocxTableCell({
+        children: [new Paragraph(String(text))],
+        width: { size: spentColumnWidths[colIndex], type: WidthType.PERCENTAGE },
+      })
+    const resolvedSpentNumber =
+      spentNumber || `BU-EXP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`
     const totalAmount = selectedProducts.reduce((sum, product, index) => {
       const productId = getProductKey(product, index)
       const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
@@ -1347,204 +1543,240 @@ export default function QuotesPage() {
     }, 0)
 
     const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              size: 24,
+              color: "000000",
+            },
+          },
+        },
+      },
       sections: [{
         children: [
-          new Paragraph({
-            text: "ЗАРЛАГЫН БАРИМТ",
-            heading: "Heading1",
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Зарлагын баримтын дугаар: ", bold: true }),
-              new TextRun({ text: spentNumber || `BU-EXP-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001` }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Огноо: ", bold: true }),
-              new TextRun({ text: spentDate ? formatDate(spentDate) : formatDate(selectedQuote.createdAt) }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Худалдан авагчийн нэр: ", bold: true }),
-              new TextRun({ text: `${selectedQuote.firstName} ${selectedQuote.lastName}` }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Албан тушаал: ", bold: true }),
-              new TextRun({ text: selectedQuote.position || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Компани: ", bold: true }),
-              new TextRun({ text: selectedQuote.company }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: buyerRegNumber || "-" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
-              new TextRun({ text: selectedQuote.additionalInfo || "" }),
-            ],
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Зарлагын баримт илгээгч компанийн мэдээлэл",
-            heading: "Heading2",
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн нэр: ", bold: true }),
-              new TextRun({ text: companyName }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Регистерийн №: ", bold: true }),
-              new TextRun({ text: companyRegNumber }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Хаяг: ", bold: true }),
-              new TextRun({ text: companyAddress }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Email: ", bold: true }),
-              new TextRun({ text: companyEmail }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Утас, Факс: ", bold: true }),
-              new TextRun({ text: companyPhone }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Гар утас: ", bold: true }),
-              new TextRun({ text: companyMobile }),
-            ],
-          }),
-          ...(companyNote ? [new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
-              new TextRun({ text: companyNote }),
-            ],
-          })] : []),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "Сонгосон бараа",
-            heading: "Heading2",
-          }),
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
-                  new DocxTableCell({ children: [new Paragraph("№")] }),
-                  new DocxTableCell({ children: [new Paragraph("Гүйлгээний утга")] }),
-                  new DocxTableCell({ children: [new Paragraph("Код")] }),
-                  new DocxTableCell({ children: [new Paragraph("Хэмжих нэгж")] }),
-                  new DocxTableCell({ children: [new Paragraph("Тоо")] }),
-                  new DocxTableCell({ children: [new Paragraph("Барааны төлөв")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийлүүлэх хугацаа")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нэгжийн үнэ(₮)")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(НӨАТ орсон)")] }),
-                  new DocxTableCell({ children: [new Paragraph("Нийт дүн(₮)(үгээр)")] }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: "НХМаягт БМ-3 Т-1" })],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [
+                          new TextRun({
+                            text: "Сангийн сайдын 2017 оны  ....тоот тушаалын хавсралт",
+                          }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
                 ],
-              }),
-              ...selectedProducts.map((product, index) => {
-                const productId = getProductKey(product, index)
-                const fallbackPrice = (product as any).price || (product as any).priceNum || 0
-                const unitPrice = parseFloat(spentPrices[productId] || String(fallbackPrice)) || 0
-                const quantity = spentQuantities[productId] !== undefined 
-                  ? spentQuantities[productId] 
-                  : (product.quantity || 0)
-                const total = unitPrice * quantity
-                const productCode = (product as any).product_code || (product as any).productCode || ""
-                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
-                const deliveryTime = spentDeliveryTimes[productId] !== undefined
-                  ? spentDeliveryTimes[productId]
-                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
-                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
-                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
-                const statusLabel = stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock
-                
-                // Format delivery time date if it exists
-                let deliveryTimeDisplay = "-"
-                if (deliveryTime) {
-                  try {
-                    const date = new Date(deliveryTime)
-                    if (!isNaN(date.getTime())) {
-                      deliveryTimeDisplay = date.toLocaleDateString("mn-MN")
-                    } else {
-                      deliveryTimeDisplay = deliveryTime
-                    }
-                  } catch {
-                    deliveryTimeDisplay = deliveryTime
-                  }
-                }
-                
-                return new DocxTableRow({
-                  children: [
-                    new DocxTableCell({ children: [new Paragraph(String(index + 1))] }),
-                    new DocxTableCell({ children: [new Paragraph(transactionDescription)] }),
-                    new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
-                    new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(statusLabel)] }),
-                    new DocxTableCell({ children: [new Paragraph(deliveryTimeDisplay)] }),
-                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
-                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
-                    new DocxTableCell({ children: [new Paragraph(formatAmountInWords(total))] }),
-                  ],
-                })
               }),
             ],
             width: { size: 100, type: WidthType.PERCENTAGE },
           }),
+          new Paragraph({ text: "" }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Нийт дүн(₮): ", bold: true }),
-              new TextRun({ text: String(totalAmount) }),
+              new TextRun({
+                text: `ЗАРЛАГЫН БАРИМТ № ${resolvedSpentNumber}`,
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
             ],
+            alignment: AlignmentType.CENTER,
           }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Нийт дүн(₮) үгээр: ", bold: true }),
-              new TextRun({ text: formatAmountInWords(totalAmount) }),
+          new Paragraph({ text: "" }),
+          new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({ children: [new TextRun({ text: companyName })] }),
+                      new Paragraph({ children: [new TextRun({ text: "(Байгууллагын нэр)" })] }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({ children: [new TextRun({ text: selectedQuote.company })] }),
+                      new Paragraph({ children: [new TextRun({ text: "(Худалдан авагчийн нэр)" })] }),
+                    ],
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Регистерийн №: ", bold: true }),
+                          new TextRun({ text: companyRegNumber }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Регистерийн №: ", bold: true }),
+                          new TextRun({ text: buyerRegNumber || "-" }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Огноо: ", bold: true }),
+                          new TextRun({ text: spentDate ? formatDate(spentDate) : formatDate(selectedQuote.createdAt) }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: "(тээвэрлэгчийн хаяг, албан тушаал, нэр)" })],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ],
+            width: { size: 100, type: WidthType.PERCENTAGE },
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Нэмэлт мэдээлэл: ", bold: true }),
-              new TextRun({ text: selectedQuote.additionalInfo || "" }),
+              new TextRun({
+                text: "Сонгосон бараа",
+                bold: true,
+                size: 28,
+                color: "000000",
+              }),
             ],
           }),
-          ...(companyNote ? [new Paragraph({
-            children: [
-              new TextRun({ text: "Компанийн тэмдэглэл: ", bold: true }),
-              new TextRun({ text: companyNote }),
+          new DocxTable({
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+            },
+            rows: [
+              new DocxTableRow({
+                children: [
+                  spentCell("№", 0),
+                  spentCell("Барааны нэр", 1),
+                  spentCell("Код", 2),
+                  spentCell("Хэмжих нэгж", 3),
+                  spentCell("Тоо", 4),
+                  spentCell("Нэгжийн үнэ(₮)", 5),
+                  spentCell("Нийт дүн(₮)(НӨАТ орсон)", 6),
+                ],
+              }),
+              ...selectedProducts.map((product, index) => {
+                const productId = getProductKey(product, index)
+                const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                const unitPrice = toNumber(spentPrices[productId] ?? fallbackPrice)
+                const quantity = spentQuantities[productId] !== undefined 
+                  ? spentQuantities[productId] 
+                  : toNumber(product.quantity || 0)
+                const total = unitPrice * quantity
+                const productCode = (product as any).product_code || (product as any).productCode || ""
+                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+              
+                
+                return new DocxTableRow({
+                  children: [
+                    spentCell(index + 1, 0),
+                    spentCell(transactionDescription, 1),
+                    spentCell(productCode || "-", 2),
+                    spentCell(unitOfMeasurement, 3),
+                    spentCell(quantity, 4),
+                    spentCell(unitPrice, 5),
+                    spentCell(total, 6),
+                  ],
+                })
+              }),
+              new DocxTableRow({
+                children: [
+                  new DocxTableCell({
+                    columnSpan: 6,
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: "НИЙТ ДҮН", bold: true })],
+                      }),
+                    ],
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ],
-          })] : []),
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           // Stamp and Signature Section
           new DocxTable({
+            borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            },
             rows: [
               new DocxTableRow({
                 children: [
@@ -1710,7 +1942,6 @@ export default function QuotesPage() {
         "Овог": quote.lastName,
         "И-мэйл": quote.email,
         "Утас": quote.phone,
-        "Албан тушаал": quote.position,
         "Компани": quote.company,
         "Нэмэлт мэдээлэл": quote.additionalInfo,
         "Сонгосон бараа": products,
@@ -1734,7 +1965,6 @@ export default function QuotesPage() {
       { wch: 15 }, // Овог
       { wch: 25 }, // И-мэйл
       { wch: 15 }, // Утас
-      { wch: 20 }, // Албан тушаал
       { wch: 20 }, // Компани
       { wch: 40 }, // Нэмэлт мэдээлэл
       { wch: 50 }, // Сонгосон бараа
@@ -1780,11 +2010,7 @@ export default function QuotesPage() {
         "Утга": quote.phone,
       },
       {
-        "Талбар": "Албан тушаал",
-        "Утга": quote.position,
-      },
-      {
-        "Талбар": "Компани",
+        "Талбар": "Компаний нэр",
         "Утга": quote.company,
       },
       {
@@ -1975,8 +2201,7 @@ export default function QuotesPage() {
                 </TableHead>
                 <TableHead className="min-w-[120px]">Огноо</TableHead>
                 <TableHead className="min-w-[150px]">Харилцагч</TableHead>
-                <TableHead className="hidden md:table-cell min-w-[120px]">Албан тушаал</TableHead>
-                <TableHead className="hidden lg:table-cell min-w-[150px]">Компани</TableHead>
+                <TableHead className="hidden lg:table-cell min-w-[150px]">Компаний нэр</TableHead>
                 <TableHead className="hidden lg:table-cell min-w-[180px]">И-мэйл</TableHead>
                 <TableHead className="hidden md:table-cell min-w-[120px]">Утас</TableHead>
                 <TableHead className="min-w-[100px]">Барааны тоо</TableHead>
@@ -1987,13 +2212,13 @@ export default function QuotesPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     Уншиж байна...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={9} className="text-center py-8 text-destructive">
                     {error}
                     <Button
                       variant="outline"
@@ -2006,7 +2231,7 @@ export default function QuotesPage() {
                 </TableRow>
               ) : filteredQuotes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     {quotes.length === 0 
                       ? "No quote requests found."
                       : `No quotes found for selected date range${startDate || endDate ? ` (${startDate || "..."} - ${endDate || "..."})` : ""}.`}
@@ -2030,7 +2255,6 @@ export default function QuotesPage() {
                       <TableCell className="font-medium min-w-[150px]">
                         {quote.firstName} {quote.lastName}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell min-w-[120px]">{quote.position || "-"}</TableCell>
                       <TableCell className="hidden lg:table-cell min-w-[150px]">{quote.company}</TableCell>
                       <TableCell className="hidden lg:table-cell min-w-[180px]">{quote.email}</TableCell>
                       <TableCell className="hidden md:table-cell min-w-[120px]">{quote.phone}</TableCell>
@@ -2111,13 +2335,7 @@ export default function QuotesPage() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">
-                        Албан тушаал
-                      </label>
-                      <p className="text-sm">{selectedQuote.position}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        Компани
+                        Компаний нэр
                       </label>
                       <p className="text-sm">{selectedQuote.company}</p>
                     </div>
@@ -2408,18 +2626,14 @@ export default function QuotesPage() {
                       />
                     </div>
                     <div>
-                      <Label>Худалдан авагчийн нэр</Label>
+                      <Label>Холбоо барих ажилтан</Label>
                       <Input
                         value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
                         disabled
                       />
                     </div>
                     <div>
-                      <Label>Албан тушаал</Label>
-                      <Input value={selectedQuote.position || ""} disabled />
-                    </div>
-                    <div>
-                      <Label>Компани</Label>
+                      <Label>Компаний нэр</Label>
                       <Input value={selectedQuote.company} disabled />
                     </div>
                   
@@ -2438,101 +2652,119 @@ export default function QuotesPage() {
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Сонгосон бараанууд</h3>
                   <div className="border rounded-md overflow-x-auto">
-                    <Table className="w-full">
+                    <Table className="w-full table-fixed">
+                      <colgroup>
+                        <col className="w-12" />
+                        <col className="w-[180px]" />
+                        <col className="w-[140px]" />
+                        <col className="w-[110px]" />
+                        <col className="w-[90px]" />
+                        <col className="w-[140px]" />
+                        <col className="w-[150px]" />
+                        <col className="w-[190px]" />
+                      </colgroup>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">№</TableHead>
-                          <TableHead>Гүйлгээний утга</TableHead>
+                          <TableHead>Барааны нэр</TableHead>
                           <TableHead>Код</TableHead>
                           <TableHead>Хэмжих нэгж</TableHead>
-                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead className="text-right w-[90px]">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
-                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
-                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
+                          <TableHead className="text-right font-semibold w-[150px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold w-[190px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedQuote.selectedProducts
-                          .filter((product, index) => selectedForSendOffer.has(getProductKey(product, index)))
-                          .map((product, index) => {
+                        {(() => {
+                          const filteredProducts = selectedQuote.selectedProducts.filter((product, index) =>
+                            selectedForSendOffer.has(getProductKey(product, index))
+                          )
+                          const totalAmount = filteredProducts.reduce((sum, product, index) => {
                             const productId = getProductKey(product, index)
                             const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
-                            const rawQuantity = sendOfferQuantities[productId] !== undefined 
-                              ? sendOfferQuantities[productId] 
-                              : product.quantity
+                            const rawQuantity =
+                              sendOfferQuantities[productId] !== undefined
+                                ? sendOfferQuantities[productId]
+                                : product.quantity
                             const quantity = toNumber(rawQuantity)
-                            const total = unitPrice * quantity
-                            const productCode = (product as any).product_code || (product as any).productCode || ""
-                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
-                            const deliveryTime = sendOfferDeliveryTimes[productId] !== undefined 
-                              ? sendOfferDeliveryTimes[productId] 
-                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
-                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
-                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
-                            
-                            return (
-                              <TableRow key={index}>
-                                <TableCell className="text-center">{index + 1}</TableCell>
-                                <TableCell className="font-medium">{transactionDescription}</TableCell>
-                                <TableCell>{productCode || "-"}</TableCell>
-                                <TableCell>{unitOfMeasurement}</TableCell>
-                                <TableCell className="text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={quantity}
-                                    onChange={(e) => {
-                                      const newQuantity = parseFloat(e.target.value) || 0
-                                      setSendOfferQuantities({
-                                        ...sendOfferQuantities,
-                                        [productId]: newQuantity
-                                      })
-                                    }}
-                                    className="w-20 text-right"
-                                  />
+                            return sum + unitPrice * quantity
+                          }, 0)
+
+                          return (
+                            <>
+                              {filteredProducts.map((product, index) => {
+                                const productId = getProductKey(product, index)
+                                const unitPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                                const rawQuantity = sendOfferQuantities[productId] !== undefined 
+                                  ? sendOfferQuantities[productId] 
+                                  : product.quantity
+                                const quantity = toNumber(rawQuantity)
+                                const total = unitPrice * quantity
+                                const productCode = (product as any).product_code || (product as any).productCode || ""
+                                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                                const deliveryTime = sendOfferDeliveryTimes[productId] !== undefined 
+                                  ? sendOfferDeliveryTimes[productId] 
+                                  : ((product as any).delivery_time || (product as any).deliveryTime || "")
+                                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                                
+                                return (
+                                  <TableRow key={index}>
+                                    <TableCell className="text-center">{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                    <TableCell>{productCode || "-"}</TableCell>
+                                    <TableCell>{unitOfMeasurement}</TableCell>
+                                    <TableCell className="text-right w-[90px]">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        value={quantity}
+                                        onChange={(e) => {
+                                          const newQuantity = parseFloat(e.target.value) || 0
+                                          setSendOfferQuantities({
+                                            ...sendOfferQuantities,
+                                            [productId]: newQuantity
+                                          })
+                                        }}
+                                        className="w-full text-right"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                        {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right w-[150px]">
+                                      <Input
+                                        type="number"
+                                        value={unitPrice}
+                                        readOnly
+                                        className="w-full text-right bg-muted cursor-not-allowed font-medium"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right w-[190px]">
+                                      <Input
+                                        type="number"
+                                        value={total}
+                                        readOnly
+                                        className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center font-semibold">
+                                  НИЙТ ДҮН
                                 </TableCell>
-                                <TableCell>
-                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
-                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="min-w-[180px]">
-                                  <Input
-                                    type="date"
-                                    value={deliveryTime}
-                                    onChange={(e) => {
-                                      setSendOfferDeliveryTimes({
-                                        ...sendOfferDeliveryTimes,
-                                        [productId]: e.target.value
-                                      })
-                                    }}
-                                    className="w-full"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[140px]">
-                                  <Input
-                                    type="number"
-                                    value={unitPrice}
-                                    readOnly
-                                    className="w-full text-right bg-muted cursor-not-allowed font-medium"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[180px]">
-                                  <Input
-                                    type="number"
-                                    value={total}
-                                    readOnly
-                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
-                                  />
-                                </TableCell>
-                                <TableCell className="min-w-[220px] text-sm">
-                                  {formatAmountInWords(total)}
+                                <TableCell className="text-right font-semibold">
+                                  {totalAmount}
                                 </TableCell>
                               </TableRow>
-                            )
-                          })}
+                            </>
+                          )
+                        })()}
                       </TableBody>
                     </Table>
                   </div>
@@ -2742,9 +2974,19 @@ export default function QuotesPage() {
               <>
                 {/* Invoice Information */}
                 <div>
+                <h3 className="text-lg font-semibold mb-3">Харилцагчийн мэдээлэл</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label>Нэхэмжлэлийн дугаар</Label>
+                      <Input
+                        value={invoiceNumber}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <Label>Гүйлгээний утга (№)</Label>
                       <Input
                         value={invoiceNumber}
                         readOnly
@@ -2763,14 +3005,14 @@ export default function QuotesPage() {
                       />
                     </div>
                     <div>
-                      <Label>Худалдан авагчийн нэр</Label>
+                      <Label>Холбоо барих ажилтан</Label>
                       <Input
                         value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
                         disabled
                       />
                     </div>
                     <div>
-                      <Label>Компани</Label>
+                      <Label>Компаний нэр</Label>
                       <Input value={selectedQuote.company} disabled />
                     </div>
                     <div>
@@ -2790,8 +3032,12 @@ export default function QuotesPage() {
                       <Input value={selectedQuote.phone} disabled />
                     </div>
                     <div>
-                      <Label>Албан тушаал</Label>
-                      <Input value={selectedQuote.position || ""} disabled />
+                      <Label>Төлбөр төлөх хугацаа</Label>
+                      <Input
+                        type="date"
+                        value={paymentDueDate}
+                        onChange={(e) => setPaymentDueDate(e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>
@@ -2804,103 +3050,109 @@ export default function QuotesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">№</TableHead>
-                          <TableHead>Гүйлгээний утга</TableHead>
+                          <TableHead>Барааны нэр</TableHead>
                           <TableHead>Код</TableHead>
                           <TableHead>Хэмжих нэгж</TableHead>
-                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead className="text-right w-[90px]">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
-                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
-                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
+                          <TableHead className="text-right font-semibold w-[150px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold w-[190px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedQuote.selectedProducts
-                          .filter((product, index) => selectedForInvoice.has(getProductKey(product, index)))
-                          .map((product, index) => {
+                        {(() => {
+                          const filteredProducts = selectedQuote.selectedProducts.filter((product, index) =>
+                            selectedForInvoice.has(getProductKey(product, index))
+                          )
+                          const totalAmount = filteredProducts.reduce((sum, product, index) => {
                             const productId = getProductKey(product, index)
                             const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
-                            const unitPrice = invoicePrices[productId] ?? String(fallbackPrice)
-                            const rawQuantity = invoiceQuantities[productId] !== undefined 
-                              ? invoiceQuantities[productId] 
-                              : product.quantity
+                            const unitPrice = toNumber(invoicePrices[productId] ?? fallbackPrice)
+                            const rawQuantity =
+                              invoiceQuantities[productId] !== undefined
+                                ? invoiceQuantities[productId]
+                                : product.quantity
                             const quantity = toNumber(rawQuantity)
-                            const total = toNumber(unitPrice) * quantity
-                            const productCode = (product as any).product_code || (product as any).productCode || ""
-                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
-                            const deliveryTime = invoiceDeliveryTimes[productId] !== undefined
-                              ? invoiceDeliveryTimes[productId]
-                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
-                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
-                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
-                            
-                            return (
-                              <TableRow key={index}>
-                                <TableCell className="text-center">{index + 1}</TableCell>
-                                <TableCell className="font-medium">{transactionDescription}</TableCell>
-                                <TableCell>{productCode || "-"}</TableCell>
-                                <TableCell>{unitOfMeasurement}</TableCell>
-                                <TableCell className="text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={quantity}
-                                    onChange={(e) => {
-                                      const newQuantity = parseFloat(e.target.value) || 0
-                                      setInvoiceQuantities({
-                                        ...invoiceQuantities,
-                                        [productId]: newQuantity
-                                      })
-                                    }}
-                                    className="w-20 text-right"
-                                  />
+                            return sum + unitPrice * quantity
+                          }, 0)
+
+                          return (
+                            <>
+                              {filteredProducts.map((product, index) => {
+                                const productId = getProductKey(product, index)
+                                const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                                const unitPrice = invoicePrices[productId] ?? String(fallbackPrice)
+                                const rawQuantity = invoiceQuantities[productId] !== undefined 
+                                  ? invoiceQuantities[productId] 
+                                  : product.quantity
+                                const quantity = toNumber(rawQuantity)
+                                const total = toNumber(unitPrice) * quantity
+                                const productCode = (product as any).product_code || (product as any).productCode || ""
+                                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                                
+                                return (
+                                  <TableRow key={index}>
+                                    <TableCell className="text-center">{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                    <TableCell>{productCode || "-"}</TableCell>
+                                    <TableCell>{unitOfMeasurement}</TableCell>
+                                    <TableCell className="text-right w-[90px]">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        value={quantity}
+                                        onChange={(e) => {
+                                          const newQuantity = parseFloat(e.target.value) || 0
+                                          setInvoiceQuantities({
+                                            ...invoiceQuantities,
+                                            [productId]: newQuantity
+                                          })
+                                        }}
+                                        className="w-full text-right"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                        {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right w-[150px]">
+                                      <Input
+                                        type="number"
+                                        value={unitPrice}
+                                        onChange={(e) => {
+                                          setInvoicePrices({
+                                            ...invoicePrices,
+                                            [productId]: e.target.value
+                                          })
+                                        }}
+                                        className="w-full text-right"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right w-[190px]">
+                                      <Input
+                                        type="number"
+                                        value={total}
+                                        readOnly
+                                        className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center font-semibold">
+                                  НИЙТ ДҮН
                                 </TableCell>
-                                <TableCell>
-                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
-                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="min-w-[180px]">
-                                  <Input
-                                    type="date"
-                                    value={deliveryTime}
-                                    onChange={(e) => {
-                                      setInvoiceDeliveryTimes({
-                                        ...invoiceDeliveryTimes,
-                                        [productId]: e.target.value
-                                      })
-                                    }}
-                                    className="w-full"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[140px]">
-                                  <Input
-                                    type="number"
-                                    value={unitPrice}
-                                    onChange={(e) => {
-                                      setInvoicePrices({
-                                        ...invoicePrices,
-                                        [productId]: e.target.value
-                                      })
-                                    }}
-                                    className="w-full text-right"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[180px]">
-                                  <Input
-                                    type="number"
-                                    value={total}
-                                    readOnly
-                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
-                                  />
-                                </TableCell>
-                                <TableCell className="min-w-[220px] text-sm">
-                                  {formatAmountInWords(total)}
+                                <TableCell className="text-right font-semibold">
+                                  {totalAmount}
                                 </TableCell>
                               </TableRow>
-                            )
-                          })}
+                            </>
+                          )
+                        })()}
                       </TableBody>
                     </Table>
                   </div>
@@ -3051,6 +3303,7 @@ export default function QuotesPage() {
                     const hasChanges = 
                       invoiceNumber !== ((selectedQuote as any).invoiceNumber || "") ||
                       invoiceDate !== ((selectedQuote as any).invoiceDate || "") ||
+                      paymentDueDate !== ((selectedQuote as any).paymentDueDate || "") ||
                       companyBankName !== ((selectedQuote as any).companyBankName || "Худалдаа хөгжлийн банк") ||
                       companyAccountNumber !== ((selectedQuote as any).companyAccountNumber || "MN610004000 415148288") ||
                       companyName !== ((selectedQuote as any).companyName || "БАЯН ӨНДӨР ХХК") ||
@@ -3070,6 +3323,7 @@ export default function QuotesPage() {
                         body: JSON.stringify({
                           invoiceNumber: invoiceNumber,
                           invoiceDate: invoiceDate,
+                          paymentDueDate: paymentDueDate,
                           companyBankName: companyBankName,
                           companyAccountNumber: companyAccountNumber,
                           companyName: companyName,
@@ -3101,6 +3355,7 @@ export default function QuotesPage() {
                       ...prev,
                       invoiceNumber,
                       invoiceDate,
+                      paymentDueDate,
                       companyNote,
                       companyAddress,
                       companyEmail,
@@ -3114,6 +3369,7 @@ export default function QuotesPage() {
                             ...quote,
                             invoiceNumber,
                             invoiceDate,
+                            paymentDueDate,
                             companyNote,
                             companyAddress,
                             companyEmail,
@@ -3169,7 +3425,9 @@ export default function QuotesPage() {
                 {/* Expense Receipt Information */}
                 <div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    
                     <div>
+                      
                       <Label>Зарлагын баримтын дугаар</Label>
                       <Input
                         value={spentNumber}
@@ -3189,7 +3447,7 @@ export default function QuotesPage() {
                       />
                     </div>
                     <div>
-                      <Label>Худалдан авагчийн нэр</Label>
+                      <Label>Холбоо барих ажилтан</Label>
                       <Input
                         value={`${selectedQuote.firstName} ${selectedQuote.lastName}`}
                         disabled
@@ -3215,10 +3473,6 @@ export default function QuotesPage() {
                       <Label>Утас</Label>
                       <Input value={selectedQuote.phone} disabled />
                     </div>
-                    <div>
-                      <Label>Албан тушаал</Label>
-                      <Input value={selectedQuote.position || ""} disabled />
-                    </div>
                   </div>
                 </div>
 
@@ -3230,103 +3484,109 @@ export default function QuotesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">№</TableHead>
-                          <TableHead>Гүйлгээний утга</TableHead>
+                          <TableHead>Барааны нэр</TableHead>
                           <TableHead>Код</TableHead>
                           <TableHead>Хэмжих нэгж</TableHead>
-                          <TableHead className="text-right">Тоо</TableHead>
+                          <TableHead className="text-right w-[90px]">Тоо</TableHead>
                           <TableHead>Барааны төлөв</TableHead>
-                          <TableHead className="font-semibold min-w-[180px]">Нийлүүлэх хугацаа</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[140px]">Нэгжийн үнэ(₮)</TableHead>
-                          <TableHead className="text-right font-semibold min-w-[180px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
-                          <TableHead className="font-semibold min-w-[220px] whitespace-nowrap">Нийт дүн(₮) (үгээр)</TableHead>
+                          <TableHead className="text-right font-semibold w-[150px]">Нэгжийн үнэ(₮)</TableHead>
+                          <TableHead className="text-right font-semibold w-[190px]">Нийт дүн(₮) (НӨАТ орсон)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedQuote.selectedProducts
-                          .filter((product, index) => selectedForSpent.has(getProductKey(product, index)))
-                          .map((product, index) => {
+                        {(() => {
+                          const filteredProducts = selectedQuote.selectedProducts.filter((product, index) =>
+                            selectedForSpent.has(getProductKey(product, index))
+                          )
+                          const totalAmount = filteredProducts.reduce((sum, product, index) => {
                             const productId = getProductKey(product, index)
                             const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
-                            const unitPrice = spentPrices[productId] ?? String(fallbackPrice)
-                            const rawQuantity = spentQuantities[productId] !== undefined 
-                              ? spentQuantities[productId] 
-                              : product.quantity
+                            const unitPrice = toNumber(spentPrices[productId] ?? fallbackPrice)
+                            const rawQuantity =
+                              spentQuantities[productId] !== undefined
+                                ? spentQuantities[productId]
+                                : product.quantity
                             const quantity = toNumber(rawQuantity)
-                            const total = toNumber(unitPrice) * quantity
-                            const productCode = (product as any).product_code || (product as any).productCode || ""
-                            const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
-                            const deliveryTime = spentDeliveryTimes[productId] !== undefined
-                              ? spentDeliveryTimes[productId]
-                              : ((product as any).delivery_time || (product as any).deliveryTime || "")
-                            const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
-                            const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
-                            
-                            return (
-                              <TableRow key={index}>
-                                <TableCell className="text-center">{index + 1}</TableCell>
-                                <TableCell className="font-medium">{transactionDescription}</TableCell>
-                                <TableCell>{productCode || "-"}</TableCell>
-                                <TableCell>{unitOfMeasurement}</TableCell>
-                                <TableCell className="text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={quantity}
-                                    onChange={(e) => {
-                                      const newQuantity = parseFloat(e.target.value) || 0
-                                      setSpentQuantities({
-                                        ...spentQuantities,
-                                        [productId]: newQuantity
-                                      })
-                                    }}
-                                    className="w-20 text-right"
-                                  />
+                            return sum + unitPrice * quantity
+                          }, 0)
+
+                          return (
+                            <>
+                              {filteredProducts.map((product, index) => {
+                                const productId = getProductKey(product, index)
+                                const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                                const unitPrice = spentPrices[productId] ?? String(fallbackPrice)
+                                const rawQuantity = spentQuantities[productId] !== undefined 
+                                  ? spentQuantities[productId] 
+                                  : product.quantity
+                                const quantity = toNumber(rawQuantity)
+                                const total = toNumber(unitPrice) * quantity
+                                const productCode = (product as any).product_code || (product as any).productCode || ""
+                                const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
+                                const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
+                                const stockStatus = (product as any).stockStatus || (product as any).stock_status || "inStock"
+                                
+                                return (
+                                  <TableRow key={index}>
+                                    <TableCell className="text-center">{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{transactionDescription}</TableCell>
+                                    <TableCell>{productCode || "-"}</TableCell>
+                                    <TableCell>{unitOfMeasurement}</TableCell>
+                                    <TableCell className="text-right w-[90px]">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        value={quantity}
+                                        onChange={(e) => {
+                                          const newQuantity = parseFloat(e.target.value) || 0
+                                          setSpentQuantities({
+                                            ...spentQuantities,
+                                            [productId]: newQuantity
+                                          })
+                                        }}
+                                        className="w-full text-right"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
+                                        {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right w-[150px]">
+                                      <Input
+                                        type="number"
+                                        value={unitPrice}
+                                        onChange={(e) => {
+                                          setSpentPrices({
+                                            ...spentPrices,
+                                            [productId]: e.target.value
+                                          })
+                                        }}
+                                        className="w-full text-right"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right w-[190px]">
+                                      <Input
+                                        type="number"
+                                        value={total}
+                                        readOnly
+                                        className="w-full text-right bg-muted cursor-not-allowed font-semibold"
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center font-semibold">
+                                  НИЙТ ДҮН
                                 </TableCell>
-                                <TableCell>
-                                  <Badge className={stockStatusColors[stockStatus as keyof typeof stockStatusColors] || stockStatusColors.inStock}>
-                                    {stockStatusLabels[stockStatus as keyof typeof stockStatusLabels] || stockStatusLabels.inStock}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="min-w-[180px]">
-                                  <Input
-                                    type="date"
-                                    value={deliveryTime}
-                                    onChange={(e) => {
-                                      setSpentDeliveryTimes({
-                                        ...spentDeliveryTimes,
-                                        [productId]: e.target.value
-                                      })
-                                    }}
-                                    className="w-full"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[140px]">
-                                  <Input
-                                    type="number"
-                                    value={unitPrice}
-                                    onChange={(e) => {
-                                      setSpentPrices({
-                                        ...spentPrices,
-                                        [productId]: e.target.value
-                                      })
-                                    }}
-                                    className="w-full text-right"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right min-w-[180px]">
-                                  <Input
-                                    type="number"
-                                    value={total}
-                                    readOnly
-                                    className="w-full text-right bg-muted cursor-not-allowed font-semibold"
-                                  />
-                                </TableCell>
-                                <TableCell className="min-w-[220px] text-sm">
-                                  {formatAmountInWords(total)}
+                                <TableCell className="text-right font-semibold">
+                                  {totalAmount}
                                 </TableCell>
                               </TableRow>
-                            )
-                          })}
+                            </>
+                          )
+                        })()}
                       </TableBody>
                     </Table>
                   </div>

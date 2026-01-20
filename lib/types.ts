@@ -5,7 +5,6 @@ export interface PriceQuote {
   email: string
   phone: string
   additionalInfo: string
-  position: string
   company: string
   selectedProducts: Array<{
     productId: string
