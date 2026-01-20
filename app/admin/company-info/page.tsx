@@ -145,10 +145,10 @@ export default function CompanyInfoPage() {
           <h1 className="text-2xl sm:text-3xl font-bold">Company Info</h1>
           
         </div>
-        <Button onClick={openCreate} className="w-full sm:w-auto">
+        {/* <Button onClick={openCreate} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Add Company Info
-        </Button>
+        </Button> */}
       </div>
 
       <Card>
