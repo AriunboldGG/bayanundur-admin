@@ -863,10 +863,12 @@ export default function ProductsPage() {
 
   // Filter products based on selected filters and search query
   const filteredProducts = products.filter((product) => {
-    // Search filter - search by product name (case-insensitive)
+    // Search filter - search by product name, brand, or product code (case-insensitive)
+    const searchLower = searchQuery.toLowerCase()
     const searchMatch = searchQuery === "" || 
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+      product.name.toLowerCase().includes(searchLower) ||
+      (product.brand && product.brand.toLowerCase().includes(searchLower)) ||
+      (product.product_code && product.product_code.toLowerCase().includes(searchLower))
     
     const categoryMatch = selectedCategory === "all" || product.category === selectedCategory
     const brandMatch = selectedBrand === "all" || product.brand === selectedBrand
@@ -940,7 +942,7 @@ export default function ProductsPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Барааны нэрээр хайх... (Search by product name...)"
+                    placeholder="Барааны нэр/код... (Search by name or code...)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
