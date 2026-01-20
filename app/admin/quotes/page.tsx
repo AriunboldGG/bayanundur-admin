@@ -2610,8 +2610,7 @@ export default function QuotesPage() {
                       <Label>Үнийн саналын дугаар</Label>
                       <Input
                         value={quoteNumber}
-                        readOnly
-                        className="bg-muted cursor-not-allowed"
+                        onChange={(e) => setQuoteNumber(e.target.value)}
                         placeholder=""
                       />
                     </div>
@@ -2980,18 +2979,14 @@ export default function QuotesPage() {
                       <Label>Нэхэмжлэлийн дугаар</Label>
                       <Input
                         value={invoiceNumber}
-                        readOnly
-                        disabled
-                        className="bg-muted cursor-not-allowed"
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
                       />
                     </div>
                     <div>
                       <Label>Гүйлгээний утга (№)</Label>
                       <Input
                         value={invoiceNumber}
-                        readOnly
-                        disabled
-                        className="bg-muted cursor-not-allowed"
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
                       />
                     </div>
                     <div>
@@ -3431,9 +3426,7 @@ export default function QuotesPage() {
                       <Label>Зарлагын баримтын дугаар</Label>
                       <Input
                         value={spentNumber}
-                        readOnly
-                        disabled
-                        className="bg-muted cursor-not-allowed"
+                        onChange={(e) => setSpentNumber(e.target.value)}
                       />
                     </div>
                     <div>
@@ -3556,13 +3549,8 @@ export default function QuotesPage() {
                                       <Input
                                         type="number"
                                         value={unitPrice}
-                                        onChange={(e) => {
-                                          setSpentPrices({
-                                            ...spentPrices,
-                                            [productId]: e.target.value
-                                          })
-                                        }}
-                                        className="w-full text-right"
+                                        readOnly
+                                        className="w-full text-right bg-muted cursor-not-allowed font-medium"
                                       />
                                     </TableCell>
                                     <TableCell className="text-right w-[190px]">
