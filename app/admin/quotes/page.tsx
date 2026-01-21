@@ -1229,7 +1229,7 @@ export default function QuotesPage() {
                         alignment: AlignmentType.RIGHT,
                         children: [
                           new TextRun({
-                            text: "Сангийн сайдын 2017 оны  ....тоот тушаалын хавсралт",
+                            text: "Сангийн сайдын 2017 оны  347 тоот тушаалын хавсралт",
                           }),
                         ],
                       }),
@@ -1581,7 +1581,7 @@ export default function QuotesPage() {
                         alignment: AlignmentType.RIGHT,
                         children: [
                           new TextRun({
-                            text: "Сангийн сайдын 2017 оны  ....тоот тушаалын хавсралт",
+                            text: "Сангийн сайдын 2017 оны  347 тоот тушаалын хавсралт",
                           }),
                         ],
                       }),
