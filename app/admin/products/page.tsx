@@ -45,7 +45,7 @@ interface Product {
   mainCategory?: string
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
-  product_sector?: string // Product sector
+  product_sector?: string[] | string // Product sector
   "model number"?: string // Модел дугаар (Model number)
   product_code?: string // Product code (auto-generated)
   brand_image?: string // Brand image URL
@@ -107,7 +107,7 @@ export default function ProductsPage() {
     mainCategory: "", // Main category ID
     category: "", // Ангилал (subcategory)
     subcategory: "", // Дэд ангилал (sub-subcategory if exists)
-    productSector: "", // Product sector (id or name)
+    productSector: [] as string[], // Product sector (ids or names)
     modelNumber: "", // Модел дугаар
     productCode: "", // Product code (auto-generated)
     productTypes: [] as string[], // Product types array
@@ -144,6 +144,31 @@ export default function ProductsPage() {
   const [sizes, setSizes] = useState<string[]>([])
   const [colorInput, setColorInput] = useState("")
   const [sizeInput, setSizeInput] = useState("")
+
+  const normalizeProductSectors = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim()
+      if (!trimmed) return []
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (Array.isArray(parsed)) {
+            return parsed.map((item) => String(item).trim()).filter(Boolean)
+          }
+        } catch (error) {
+          console.warn("Failed to parse product sector JSON:", error)
+        }
+      }
+      if (trimmed.includes(",")) {
+        return trimmed.split(",").map((item) => item.trim()).filter(Boolean)
+      }
+      return [trimmed]
+    }
+    return []
+  }
 
   const getSubSubcategoriesForCategory = (categoryIdOrName: string) => {
     if (!categoryIdOrName) return []
@@ -365,7 +390,7 @@ export default function ProductsPage() {
           mainCategory: product.mainCategory || "",
           category: product.category || "",
           subcategory: product.subcategory || "",
-          product_sector: product.product_sector || product.productSector || "",
+          product_sector: normalizeProductSectors(product.product_sector || product.productSector),
           "model number": product["model number"] || product.model_number || product.modelNumber || "",
           product_code: product.product_code || product.productCode || "",
           brand_image: product.brand_image || product.brandImage || "",
@@ -434,7 +459,7 @@ export default function ProductsPage() {
         mainCategory: product.mainCategory || "",
         category: product.category || "",
         subcategory: product.subcategory || "",
-        productSector: product.product_sector || (product as any).productSector || "",
+        productSector: normalizeProductSectors(product.product_sector || (product as any).productSector),
         modelNumber: product["model number"] || "",
         productCode: product.product_code || "",
         productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
@@ -493,7 +518,7 @@ export default function ProductsPage() {
         mainCategory: "",
         category: "",
         subcategory: "",
-        productSector: "",
+        productSector: [] as string[],
         modelNumber: "",
         productCode: "",
         productTypes: [],
@@ -532,7 +557,7 @@ export default function ProductsPage() {
       mainCategory: "",
       category: "",
       subcategory: "",
-      productSector: "",
+      productSector: [] as string[],
       modelNumber: "",
       productCode: "",
       productTypes: [],
@@ -700,7 +725,7 @@ export default function ProductsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.productSector) {
+    if (!formData.productSector.length) {
       alert("Салбарын ангилал сонгоно уу (Please select product sector)")
       return
     }
@@ -768,7 +793,7 @@ export default function ProductsPage() {
       formDataToSend.append('mainCategory', mainCategoryName) // Send name instead of ID
       formDataToSend.append('category', categoryName) // Send name instead of ID
       formDataToSend.append('subcategory', subcategoryName) // Send name instead of ID
-      formDataToSend.append('product_sector', formData.productSector)
+      formDataToSend.append('product_sector', JSON.stringify(formData.productSector))
       formDataToSend.append('model_number', formData.modelNumber)
       formDataToSend.append('product_code', formData.productCode)
       formDataToSend.append('productTypes', JSON.stringify(formData.productTypes))
@@ -1124,30 +1149,66 @@ export default function ProductsPage() {
               {/* Product Sector Selection */}
               <div className="grid gap-2">
                 <Label htmlFor="productSector">Салбарын ангилал (Product Sector) *</Label>
-                <Select
-                  value={formData.productSector}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, productSector: value })
-                  }
-                  required
-                >
-                  <SelectTrigger id="productSector">
-                    <SelectValue placeholder="Салбарын ангилал сонгох" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productSectors.length === 0 ? (
-                      <SelectItem value="__empty" disabled>
-                        Салбарын ангилал олдсонгүй
-                      </SelectItem>
-                    ) : (
-                      productSectors.map((sector) => (
-                        <SelectItem key={sector.id} value={sector.name}>
-                          {sector.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                      id="productSector"
+                    >
+                      {formData.productSector.length > 0
+                        ? `${formData.productSector.length} салбар сонгогдсон`
+                        : "Салбарын ангилал сонгох"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <div className="p-2 space-y-2">
+                      {productSectors.length === 0 ? (
+                        <div className="text-sm text-muted-foreground px-2 py-1">
+                          Салбарын ангилал олдсонгүй
+                        </div>
+                      ) : (
+                        productSectors.map((sector) => {
+                          const isSelected = formData.productSector.includes(sector.name)
+                          return (
+                            <div
+                              key={sector.id}
+                              className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setFormData({
+                                    ...formData,
+                                    productSector: formData.productSector.filter(
+                                      (value) => value !== sector.name
+                                    ),
+                                  })
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    productSector: [...formData.productSector, sector.name],
+                                  })
+                                }
+                              }}
+                            >
+                              <div
+                                className={`flex h-4 w-4 items-center justify-center rounded-sm border ${
+                                  isSelected
+                                    ? "bg-primary border-primary text-primary-foreground"
+                                    : "border-input"
+                                }`}
+                              >
+                                {isSelected && <Check className="h-3 w-3" />}
+                              </div>
+                              <Label className="cursor-pointer flex-1">
+                                {sector.name}
+                              </Label>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Main Category Selection - Always show as dropdown (editable) */}

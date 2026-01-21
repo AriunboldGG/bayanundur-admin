@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, getStorageBucket } from "@/lib/firebase-admin";
 
+const parseProductSector = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean)
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item).trim()).filter(Boolean)
+        }
+      } catch (error) {
+        console.warn("[Products API] Failed to parse product_sector JSON:", error)
+      }
+    }
+    if (trimmed.includes(",")) {
+      return trimmed.split(",").map((item) => item.trim()).filter(Boolean)
+    }
+    return [trimmed]
+  }
+  return []
+}
+
 // GET - Get a single product by ID
 export async function GET(
   request: NextRequest,
@@ -179,6 +204,7 @@ export async function PUT(
         }
       }
       
+      const productSectorValue = formData.get("product_sector")
       productData = {
         name: formData.get("name") as string,
         price: parseFloat(formData.get("price") as string),
@@ -192,7 +218,7 @@ export async function PUT(
         mainCategory: formData.get("mainCategory") as string || "",
         category: formData.get("category") as string,
         subcategory: formData.get("subcategory") as string || "",
-        product_sector: formData.get("product_sector") as string || "",
+        product_sector: parseProductSector(productSectorValue),
         model_number: formData.get("model_number") as string || "",
         product_code: formData.get("product_code") as string || "",
         productTypes: productTypes,
@@ -275,7 +301,7 @@ export async function PUT(
         mainCategory: mainCategory || "",
         category: category || "",
         subcategory: subcategory || "",
-        product_sector: product_sector || "",
+        product_sector: parseProductSector(product_sector),
         model_number: model_number || "",
         product_code: product_code || "",
         brand_image: brand_image || "",
