@@ -73,6 +73,7 @@ export default function QuotesPage() {
   const [startDate, setStartDate] = useState<string>("")
   const [endDate, setEndDate] = useState<string>("")
   const [invoicePrices, setInvoicePrices] = useState<Record<string, string>>({})
+  const [editingInvoicePriceId, setEditingInvoicePriceId] = useState<string | null>(null)
   const [invoiceQuantities, setInvoiceQuantities] = useState<Record<string, number>>({})
   const [invoiceDeliveryTimes, setInvoiceDeliveryTimes] = useState<Record<string, string>>({})
   const [invoiceNumber, setInvoiceNumber] = useState<string>("")
@@ -624,6 +625,34 @@ export default function QuotesPage() {
     return Number.isFinite(parsed) ? parsed : 0
   }
 
+  const PRICE_DECIMALS = 3
+
+  const roundToThousandth = (value: number): number => {
+    const factor = 10 ** PRICE_DECIMALS
+    if (!Number.isFinite(value)) return 0
+    return Math.round((value + Number.EPSILON) * factor) / factor
+  }
+
+  const formatPriceInput = (value: number | string): string => {
+    const rounded = roundToThousandth(toNumber(value))
+    return rounded.toFixed(PRICE_DECIMALS)
+  }
+
+  const priceFormatter = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: PRICE_DECIMALS,
+    maximumFractionDigits: PRICE_DECIMALS,
+  })
+  const priceFormatterNoDecimals = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+
+  const formatPriceDisplay = (value: number | string): string => {
+    const rounded = roundToThousandth(toNumber(value))
+    const isWhole = Math.abs(rounded - Math.round(rounded)) < 1e-9
+    return (isWhole ? priceFormatterNoDecimals : priceFormatter).format(rounded)
+  }
+
   const numberToMongolianWords = (value: number): string => {
     const ones = ["тэг", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес"]
     const tens = ["", "арав", "хорь", "гуч", "дөч", "тавь", "жаран", "далан", "наян", "ерэн"]
@@ -922,6 +951,39 @@ export default function QuotesPage() {
     }
   }
 
+  const formatDateOnly = (dateString: string | Date | any) => {
+    if (!dateString) return "Огноо байхгүй"
+
+    try {
+      let date: Date
+
+      if (dateString && typeof dateString === "object" && dateString.toDate) {
+        date = dateString.toDate()
+      } else if (dateString && typeof dateString === "object" && dateString.seconds) {
+        date = new Date(dateString.seconds * 1000)
+      } else if (typeof dateString === "string") {
+        date = new Date(dateString)
+      } else if (dateString instanceof Date) {
+        date = dateString
+      } else {
+        date = new Date(dateString)
+      }
+
+      if (isNaN(date.getTime())) {
+        return "Огноо буруу"
+      }
+
+      return date.toLocaleDateString("mn-MN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+    } catch (error) {
+      console.error("Error formatting date:", error, dateString)
+      return "Огноо буруу"
+    }
+  }
+
   // Generate Татаж авах document for Send Offer
   const handleDownloadSendOfferWord = async () => {
     if (!selectedQuote) return
@@ -972,7 +1034,7 @@ export default function QuotesPage() {
           new Paragraph({
             children: [
               new TextRun({ text: "Огноо: ", bold: true }),
-              new TextRun({ text: quoteDate ? formatDate(quoteDate) : formatDate(selectedQuote.createdAt) }),
+              new TextRun({ text: quoteDate ? formatDateOnly(quoteDate) : formatDateOnly(selectedQuote.createdAt) }),
             ],
           }),
           new Paragraph({ text: "" }),
@@ -1161,8 +1223,8 @@ export default function QuotesPage() {
                     sendOfferCell(unitOfMeasurement, 3),
                     sendOfferCell(quantity, 4),
                     sendOfferCell(statusLabel, 5),
-                    sendOfferCell(unitPrice, 6),
-                    sendOfferCell(total, 7),
+                    sendOfferCell(formatPriceDisplay(unitPrice), 6),
+                    sendOfferCell(formatPriceDisplay(total), 7),
                   ],
                 })
               }),
@@ -1181,7 +1243,7 @@ export default function QuotesPage() {
                     children: [
                       new Paragraph({
                         alignment: AlignmentType.RIGHT,
-                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                        children: [new TextRun({ text: formatPriceDisplay(totalAmount), bold: true })],
                       }),
                     ],
                     width: { size: sendOfferColumnWidths[7], type: WidthType.PERCENTAGE },
@@ -1323,7 +1385,7 @@ export default function QuotesPage() {
           new Paragraph({
             children: [
               new TextRun({ text: "Огноо: ", bold: true }),
-              new TextRun({ text: invoiceDate ? formatDate(invoiceDate) : formatDate(selectedQuote.createdAt) }),
+              new TextRun({ text: invoiceDate ? formatDateOnly(invoiceDate) : formatDateOnly(selectedQuote.createdAt) }),
             ],
           }),
           new Paragraph({ text: "" }),
@@ -1372,13 +1434,13 @@ export default function QuotesPage() {
                       new Paragraph({
                         children: [
                           new TextRun({ text: "Нэхэмжилсэн огноо: ", bold: true }),
-                          new TextRun({ text: invoiceDate ? formatDate(invoiceDate) : formatDate(selectedQuote.createdAt) }),
+                          new TextRun({ text: invoiceDate ? formatDateOnly(invoiceDate) : formatDateOnly(selectedQuote.createdAt) }),
                         ],
                       }),
                       new Paragraph({
                         children: [
                           new TextRun({ text: "Төлбөр төлөх хугацаа: ", bold: true }),
-                          new TextRun({ text: paymentDueDate ? formatDate(paymentDueDate) : "-" }),
+                          new TextRun({ text: paymentDueDate ? formatDateOnly(paymentDueDate) : "-" }),
                         ],
                       }),
                       new Paragraph({
@@ -1492,8 +1554,8 @@ export default function QuotesPage() {
               }),
               ...selectedProducts.map((product, index) => {
                 const productId = getProductKey(product, index)
-                const fallbackPrice = (product as any).price || (product as any).priceNum || 0
-                const unitPrice = parseFloat(invoicePrices[productId] || String(fallbackPrice)) || 0
+                const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
+                const unitPrice = toNumber(invoicePrices[productId] ?? fallbackPrice)
                 const quantity = invoiceQuantities[productId] !== undefined 
                   ? invoiceQuantities[productId] 
                   : (product.quantity || 0)
@@ -1508,8 +1570,8 @@ export default function QuotesPage() {
                     new DocxTableCell({ children: [new Paragraph(productCode || "-")] }),
                     new DocxTableCell({ children: [new Paragraph(unitOfMeasurement)] }),
                     new DocxTableCell({ children: [new Paragraph(String(quantity))] }),
-                    new DocxTableCell({ children: [new Paragraph(String(unitPrice))] }),
-                    new DocxTableCell({ children: [new Paragraph(String(total))] }),
+                    new DocxTableCell({ children: [new Paragraph(formatPriceDisplay(unitPrice))] }),
+                    new DocxTableCell({ children: [new Paragraph(formatPriceDisplay(total))] }),
                   ],
                 })
               }),
@@ -1528,7 +1590,7 @@ export default function QuotesPage() {
                     children: [
                       new Paragraph({
                         alignment: AlignmentType.RIGHT,
-                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                        children: [new TextRun({ text: formatPriceDisplay(totalAmount), bold: true })],
                       }),
                     ],
                   }),
@@ -1687,6 +1749,12 @@ export default function QuotesPage() {
                   new DocxTableCell({
                     children: [
                       new Paragraph({ children: [new TextRun({ text: companyName })] }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Хаяг: ", bold: true }),
+                          new TextRun({ text: companyAddress }),
+                        ],
+                      }),
                       new Paragraph({ children: [new TextRun({ text: "(Байгууллагын нэр)" })] }),
                     ],
                     width: { size: 50, type: WidthType.PERCENTAGE },
@@ -1731,7 +1799,7 @@ export default function QuotesPage() {
                       new Paragraph({
                         children: [
                           new TextRun({ text: "Огноо: ", bold: true }),
-                          new TextRun({ text: spentDate ? formatDate(spentDate) : formatDate(selectedQuote.createdAt) }),
+                          new TextRun({ text: spentDate ? formatDateOnly(spentDate) : formatDateOnly(selectedQuote.createdAt) }),
                         ],
                       }),
                     ],
@@ -1801,8 +1869,8 @@ export default function QuotesPage() {
                     spentCell(productCode || "-", 2),
                     spentCell(unitOfMeasurement, 3),
                     spentCell(quantity, 4),
-                    spentCell(unitPrice, 5),
-                    spentCell(total, 6),
+                    spentCell(formatPriceDisplay(unitPrice), 5),
+                    spentCell(formatPriceDisplay(total), 6),
                   ],
                 })
               }),
@@ -1821,7 +1889,7 @@ export default function QuotesPage() {
                     children: [
                       new Paragraph({
                         alignment: AlignmentType.RIGHT,
-                        children: [new TextRun({ text: String(totalAmount), bold: true })],
+                        children: [new TextRun({ text: formatPriceDisplay(totalAmount), bold: true })],
                       }),
                     ],
                   }),
@@ -2498,10 +2566,14 @@ export default function QuotesPage() {
                                 <TableCell>{product.size || "-"}</TableCell>
                                 <TableCell>{product.modelNumber || "-"}</TableCell>
                                 <TableCell className="text-right">
-                                  {product.price ? product.price.toLocaleString("mn-MN") : "-"}
+                                  {product.price !== undefined && product.price !== null
+                                    ? formatPriceDisplay(product.price)
+                                    : "-"}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  {product.priceNum !== undefined ? product.priceNum : "-"}
+                                  {product.priceNum !== undefined && product.priceNum !== null
+                                    ? formatPriceDisplay(product.priceNum)
+                                    : "-"}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   {quantity}
@@ -2784,16 +2856,16 @@ export default function QuotesPage() {
                                     </TableCell>
                                     <TableCell className="text-right w-[150px]">
                                       <Input
-                                        type="number"
-                                        value={unitPrice}
+                                        type="text"
+                                        value={formatPriceDisplay(unitPrice)}
                                         readOnly
                                         className="w-full text-right bg-muted cursor-not-allowed font-medium"
                                       />
                                     </TableCell>
                                     <TableCell className="text-right w-[190px]">
                                       <Input
-                                        type="number"
-                                        value={total}
+                                        type="text"
+                                        value={formatPriceDisplay(total)}
                                         readOnly
                                         className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                       />
@@ -2806,7 +2878,7 @@ export default function QuotesPage() {
                                   НИЙТ ДҮН
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">
-                                  {totalAmount}
+                                  {formatPriceDisplay(totalAmount)}
                                 </TableCell>
                               </TableRow>
                             </>
@@ -3124,12 +3196,15 @@ export default function QuotesPage() {
                               {filteredProducts.map((product, index) => {
                                 const productId = getProductKey(product, index)
                                 const fallbackPrice = toNumber((product as any).price ?? (product as any).priceNum ?? 0)
-                                const unitPrice = invoicePrices[productId] ?? String(fallbackPrice)
+                                const unitPriceValue = invoicePrices[productId] ?? formatPriceInput(fallbackPrice)
+                                const unitPriceDisplay = editingInvoicePriceId === productId
+                                  ? unitPriceValue
+                                  : formatPriceDisplay(unitPriceValue)
                                 const rawQuantity = invoiceQuantities[productId] !== undefined 
                                   ? invoiceQuantities[productId] 
                                   : product.quantity
                                 const quantity = toNumber(rawQuantity)
-                                const total = toNumber(unitPrice) * quantity
+                                const total = toNumber(unitPriceValue) * quantity
                                 const productCode = (product as any).product_code || (product as any).productCode || ""
                                 const unitOfMeasurement = (product as any).unit_of_measurement || (product as any).unitOfMeasurement || (product as any).unit || "ш"
                                 const transactionDescription = (product as any).transaction_description || (product as any).transactionDescription || product.productName || ""
@@ -3163,21 +3238,31 @@ export default function QuotesPage() {
                                     </TableCell>
                                     <TableCell className="text-right w-[150px]">
                                       <Input
-                                        type="number"
-                                        value={unitPrice}
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={unitPriceDisplay}
+                                        onFocus={() => setEditingInvoicePriceId(productId)}
                                         onChange={(e) => {
-                                          setInvoicePrices({
-                                            ...invoicePrices,
+                                          setInvoicePrices((prev) => ({
+                                            ...prev,
                                             [productId]: e.target.value
-                                          })
+                                          }))
+                                        }}
+                                        onBlur={(e) => {
+                                          const rounded = formatPriceInput(e.target.value)
+                                          setInvoicePrices((prev) => ({
+                                            ...prev,
+                                            [productId]: rounded
+                                          }))
+                                          setEditingInvoicePriceId((prev) => (prev === productId ? null : prev))
                                         }}
                                         className="w-full text-right"
                                       />
                                     </TableCell>
                                     <TableCell className="text-right w-[190px]">
                                       <Input
-                                        type="number"
-                                        value={total}
+                                        type="text"
+                                        value={formatPriceDisplay(total)}
                                         readOnly
                                         className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                       />
@@ -3190,7 +3275,7 @@ export default function QuotesPage() {
                                   НИЙТ ДҮН
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">
-                                  {totalAmount}
+                                  {formatPriceDisplay(totalAmount)}
                                 </TableCell>
                               </TableRow>
                             </>
@@ -3579,16 +3664,16 @@ export default function QuotesPage() {
                                     </TableCell>
                                     <TableCell className="text-right w-[150px]">
                                       <Input
-                                        type="number"
-                                        value={unitPrice}
+                                        type="text"
+                                        value={formatPriceDisplay(unitPrice)}
                                         readOnly
                                         className="w-full text-right bg-muted cursor-not-allowed font-medium"
                                       />
                                     </TableCell>
                                     <TableCell className="text-right w-[190px]">
                                       <Input
-                                        type="number"
-                                        value={total}
+                                        type="text"
+                                        value={formatPriceDisplay(total)}
                                         readOnly
                                         className="w-full text-right bg-muted cursor-not-allowed font-semibold"
                                       />
@@ -3601,7 +3686,7 @@ export default function QuotesPage() {
                                   НИЙТ ДҮН
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">
-                                  {totalAmount}
+                                  {formatPriceDisplay(totalAmount)}
                                 </TableCell>
                               </TableRow>
                             </>

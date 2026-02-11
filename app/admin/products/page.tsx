@@ -86,6 +86,36 @@ interface SubcategoryItem {
 const buildCategoryId = (mainCategoryId: string, name: string) => `${mainCategoryId}::${name}`
 const parseCategoryName = (categoryId: string) => categoryId.split("::").slice(1).join("::") || categoryId
 
+const PRICE_DECIMALS = 3
+const roundToThousandth = (value: number): number => {
+  const factor = 10 ** PRICE_DECIMALS
+  if (!Number.isFinite(value)) return 0
+  return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
+const formatPriceInput = (value: string | number): string => {
+  const parsed = typeof value === "number" ? value : parseFloat(String(value))
+  if (!Number.isFinite(parsed)) return ""
+  return roundToThousandth(parsed).toFixed(PRICE_DECIMALS)
+}
+
+const priceFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: PRICE_DECIMALS,
+  maximumFractionDigits: PRICE_DECIMALS,
+})
+const priceFormatterNoDecimals = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+})
+
+const formatPriceDisplay = (value: string | number): string => {
+  const parsed = typeof value === "number" ? value : parseFloat(String(value))
+  if (!Number.isFinite(parsed)) return ""
+  const rounded = roundToThousandth(parsed)
+  const isWhole = Math.abs(rounded - Math.round(rounded)) < 1e-9
+  return (isWhole ? priceFormatterNoDecimals : priceFormatter).format(rounded)
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -504,8 +534,8 @@ export default function ProductsPage() {
         name: product.name || "",
         nameEn: product.name_en || (product as any).nameEn || "",
         youtubeUrl: product.youtube_url || (product as any).youtubeUrl || "",
-        price: product.price.toString(),
-        salePrice: product.sale_price !== undefined ? String(product.sale_price) : "",
+        price: formatPriceInput(product.price),
+        salePrice: product.sale_price !== undefined ? formatPriceInput(product.sale_price) : "",
         stock: product.stock.toString(),
         brand: product.brand || "",
         color: "", // Will be managed by colors array
@@ -1192,7 +1222,7 @@ export default function ProductsPage() {
                         <TableCell>{product["model number"] || "-"}</TableCell>
                         <TableCell>{colorDisplay}</TableCell>
                         <TableCell>{sizeDisplay}</TableCell>
-                        <TableCell>{product.price}₮</TableCell>
+                        <TableCell>{formatPriceDisplay(product.price)}₮</TableCell>
                         <TableCell>{product.stock}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -1662,11 +1692,14 @@ export default function ProductsPage() {
                       <Input
                         id="price"
                         type="number"
-                        step="0.01"
+                        step="0.001"
                         min="0"
                         value={formData.price}
                         onChange={(e) =>
                           setFormData({ ...formData, price: e.target.value })
+                        }
+                        onBlur={(e) =>
+                          setFormData({ ...formData, price: formatPriceInput(e.target.value) })
                         }
                         required
                       />
@@ -1676,11 +1709,14 @@ export default function ProductsPage() {
                       <Input
                         id="salePrice"
                         type="number"
-                        step="0.01"
+                        step="0.001"
                         min="0"
                         value={formData.salePrice}
                         onChange={(e) =>
                           setFormData({ ...formData, salePrice: e.target.value })
+                        }
+                        onBlur={(e) =>
+                          setFormData({ ...formData, salePrice: formatPriceInput(e.target.value) })
                         }
                       />
                     </div>
