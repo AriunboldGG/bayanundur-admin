@@ -27,14 +27,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, Trash2, X, Upload, XCircle, Search, Check } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Upload, XCircle, Search, Check, ArrowLeft, ArrowRight } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 interface Product {
   id: string
   name: string
+  name_en?: string
+  youtube_url?: string
   price: number
+  sale_price?: number
   stock: number
   brand: string
   color: string[] | string // Can be array or string
@@ -42,6 +45,7 @@ interface Product {
   material?: string
   description?: string
   feature?: string
+  manufacture_country?: string
   mainCategory?: string
   category: string // Ангилал (Category)
   subcategory: string // Дэд ангилал (Subcategory)
@@ -96,7 +100,10 @@ export default function ProductsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
+    nameEn: "",
+    youtubeUrl: "",
     price: "",
+    salePrice: "",
     stock: "",
     brand: "",
     color: "",
@@ -104,6 +111,7 @@ export default function ProductsPage() {
     material: "", // Материал
     description: "", // Тодорхойлолт
     feature: "", // Онцлог
+    manufactureCountry: "", // Manufacture country
     mainCategory: "", // Main category ID
     category: "", // Ангилал (subcategory)
     subcategory: "", // Дэд ангилал (sub-subcategory if exists)
@@ -133,6 +141,8 @@ export default function ProductsPage() {
   const [imageFiles, setImageFiles] = useState<File[]>([]) // Array of File objects for new uploads
   const [imagePreviews, setImagePreviews] = useState<string[]>([]) // Array of preview URLs
   const [isUploadingImages, setIsUploadingImages] = useState(false)
+  const [imagePreviewFileMap, setImagePreviewFileMap] = useState<Record<string, File>>({})
+  const [imageZoomOrigin, setImageZoomOrigin] = useState<Record<number, { x: number; y: number }>>({})
   
   // Brand image state
   const [brandImage, setBrandImage] = useState<string>("") // Brand image URL
@@ -168,6 +178,46 @@ export default function ProductsPage() {
       return [trimmed]
     }
     return []
+  }
+
+  const normalizeStringArray = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim()
+      return trimmed ? [trimmed] : []
+    }
+    return []
+  }
+
+  const addSizesFromInput = (rawValue: string) => {
+    const tokens = rawValue
+      .split(",")
+      .map((token) => token.trim())
+      .filter(Boolean)
+    if (tokens.length === 0) return
+    setSizes((prev) => {
+      const next = [...prev]
+      tokens.forEach((token) => {
+        if (!next.includes(token)) {
+          next.push(token)
+        }
+      })
+      return next
+    })
+    setSizeInput("")
+  }
+
+  const rebuildImageCollections = (
+    previews: string[],
+    previewFileMap: Record<string, File>
+  ) => {
+    const newFiles = previews.filter((preview) => previewFileMap[preview]).map((preview) => previewFileMap[preview])
+    const existingImages = previews.filter((preview) => !previewFileMap[preview])
+    setImageFiles(newFiles)
+    setProductImages(existingImages)
+    setImagePreviews(previews)
   }
 
   const getSubSubcategoriesForCategory = (categoryIdOrName: string) => {
@@ -371,22 +421,26 @@ export default function ProductsPage() {
         const mappedProducts = result.data.map((product: any) => ({
           id: product.id,
           name: product.name || "",
+          name_en: product.name_en || product.nameEn || "",
+          youtube_url: product.youtube_url || product.youtubeUrl || "",
           price: product.price || 0,
+          sale_price: product.sale_price ?? product.salePrice ?? undefined,
           stock: product.stock || 0,
           brand: product.brand || "",
-          color: Array.isArray(product.color) 
-            ? product.color 
-            : typeof product.color === 'string' 
-              ? product.color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0)
+          color: Array.isArray(product.color)
+            ? product.color
+            : typeof product.color === "string"
+              ? product.color.split(",").map((c: string) => c.trim()).filter((c: string) => c.length > 0)
               : [],
-          size: Array.isArray(product.size) 
-            ? product.size 
-            : typeof product.size === 'string' 
-              ? product.size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+          size: Array.isArray(product.size)
+            ? product.size
+            : typeof product.size === "string"
+              ? product.size.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0)
               : [],
           material: product.material || "",
           description: product.description || "",
           feature: product.feature || "",
+          manufacture_country: product.manufacture_country || product.manufactureCountry || "",
           mainCategory: product.mainCategory || "",
           category: product.category || "",
           subcategory: product.subcategory || "",
@@ -395,7 +449,7 @@ export default function ProductsPage() {
           product_code: product.product_code || product.productCode || "",
           brand_image: product.brand_image || product.brandImage || "",
           productTypes: Array.isArray(product.productTypes) ? product.productTypes : [],
-          images: product.images || [],
+          images: normalizeStringArray(product.images),
           createdAt: product.createdAt || product.created_at || "",
         }))
         
@@ -433,12 +487,12 @@ export default function ProductsPage() {
     if (product) {
       setEditingProduct(product)
       // Convert size and color to arrays for the UI
-      const sizeArray = Array.isArray(product.size) 
-        ? product.size 
-        : (product.size ? product.size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [])
-      const colorArray = Array.isArray(product.color) 
-        ? product.color 
-        : (product.color ? product.color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [])
+      const sizeArray = Array.isArray(product.size)
+        ? product.size
+        : (product.size ? product.size.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [])
+      const colorArray = Array.isArray(product.color)
+        ? product.color
+        : (product.color ? product.color.split(",").map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [])
       
       setColors(colorArray)
       setSizes(sizeArray)
@@ -448,7 +502,10 @@ export default function ProductsPage() {
       // Set all existing product data
       setFormData({
         name: product.name || "",
+        nameEn: product.name_en || (product as any).nameEn || "",
+        youtubeUrl: product.youtube_url || (product as any).youtubeUrl || "",
         price: product.price.toString(),
+        salePrice: product.sale_price !== undefined ? String(product.sale_price) : "",
         stock: product.stock.toString(),
         brand: product.brand || "",
         color: "", // Will be managed by colors array
@@ -456,6 +513,7 @@ export default function ProductsPage() {
         material: product.material || "",
         description: product.description || "",
         feature: product.feature || "",
+        manufactureCountry: product.manufacture_country || (product as any).manufactureCountry || "",
         mainCategory: product.mainCategory || "",
         category: product.category || "",
         subcategory: product.subcategory || "",
@@ -466,9 +524,9 @@ export default function ProductsPage() {
       })
       
       // Set existing images
-      setProductImages(product.images || [])
-      setImagePreviews(product.images || [])
-      setImageFiles([])
+      const normalizedImages = normalizeStringArray(product.images)
+      setImagePreviewFileMap({})
+      rebuildImageCollections(normalizedImages, {})
       
       // Set brand image
       setBrandImage(product.brand_image || "")
@@ -507,7 +565,10 @@ export default function ProductsPage() {
       setEditingProduct(null)
       setFormData({
         name: "",
+        nameEn: "",
+        youtubeUrl: "",
         price: "",
+        salePrice: "",
         stock: "",
         brand: "",
         color: "",
@@ -515,6 +576,7 @@ export default function ProductsPage() {
         material: "",
         description: "",
         feature: "",
+        manufactureCountry: "",
         mainCategory: "",
         category: "",
         subcategory: "",
@@ -546,7 +608,10 @@ export default function ProductsPage() {
     setSizeInput("")
     setFormData({
       name: "",
+      nameEn: "",
+      youtubeUrl: "",
       price: "",
+      salePrice: "",
       stock: "",
       brand: "",
       color: "",
@@ -554,6 +619,7 @@ export default function ProductsPage() {
       material: "",
       description: "",
       feature: "",
+      manufactureCountry: "",
       mainCategory: "",
       category: "",
       subcategory: "",
@@ -565,9 +631,15 @@ export default function ProductsPage() {
     setSelectedMainCategory("")
     setAvailableSubcategories([])
     setAvailableSubSubcategories([])
+    imagePreviews.forEach((preview) => {
+      if (typeof preview === "string" && preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview)
+      }
+    })
     setProductImages([])
     setImageFiles([])
     setImagePreviews([])
+    setImagePreviewFileMap({})
     setBrandImage("")
     setBrandImageFile(null)
     setBrandImagePreview("")
@@ -586,18 +658,18 @@ export default function ProductsPage() {
     }
     
     const newPreviews: string[] = []
-    const validFiles: File[] = []
+    const newMap = { ...imagePreviewFileMap }
     
     newFiles.forEach((file) => {
       if (file.type.startsWith('image/')) {
-        validFiles.push(file)
         const preview = URL.createObjectURL(file)
         newPreviews.push(preview)
+        newMap[preview] = file
       }
     })
-    
-    setImageFiles([...imageFiles, ...validFiles])
-    setImagePreviews([...imagePreviews, ...newPreviews])
+    const mergedPreviews = [...imagePreviews, ...newPreviews]
+    setImagePreviewFileMap(newMap)
+    rebuildImageCollections(mergedPreviews, newMap)
     
     // Reset input
     e.target.value = ''
@@ -609,24 +681,36 @@ export default function ProductsPage() {
     const previewToRemove = newPreviews[index]
     
     // Revoke object URL if it's a preview
-    if (previewToRemove.startsWith('blob:')) {
+    if (typeof previewToRemove === "string" && previewToRemove.startsWith("blob:")) {
       URL.revokeObjectURL(previewToRemove)
     }
     
     newPreviews.splice(index, 1)
-    setImagePreviews(newPreviews)
-    
-    // Remove from files if it's a new file
-    if (index < imageFiles.length) {
-      const newFiles = [...imageFiles]
-      newFiles.splice(index, 1)
-      setImageFiles(newFiles)
-    } else {
-      // Remove from existing images
-      const newImages = [...productImages]
-      newImages.splice(index - imageFiles.length, 1)
-      setProductImages(newImages)
+    const newMap = { ...imagePreviewFileMap }
+    if (previewToRemove && newMap[previewToRemove]) {
+      delete newMap[previewToRemove]
     }
+    setImagePreviewFileMap(newMap)
+    rebuildImageCollections(newPreviews, newMap)
+  }
+
+  const handlePreviewMouseMove = (index: number, event: React.MouseEvent<HTMLImageElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = ((event.clientX - rect.left) / rect.width) * 100
+    const y = ((event.clientY - rect.top) / rect.height) * 100
+    setImageZoomOrigin((prev) => ({ ...prev, [index]: { x, y } }))
+  }
+
+  const handlePreviewMouseLeave = (index: number) => {
+    setImageZoomOrigin((prev) => ({ ...prev, [index]: { x: 50, y: 50 } }))
+  }
+
+  const moveImagePreview = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= imagePreviews.length) return
+    const reordered = [...imagePreviews]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    rebuildImageCollections(reordered, imagePreviewFileMap)
   }
   
   const handleBrandImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -782,12 +866,18 @@ export default function ProductsPage() {
       
       // Append product fields
       formDataToSend.append('name', formData.name)
+      formDataToSend.append('name_en', formData.nameEn)
+      formDataToSend.append('youtube_url', formData.youtubeUrl)
       formDataToSend.append('price', formData.price)
+      if (formData.salePrice) {
+        formDataToSend.append('sale_price', formData.salePrice)
+      }
       formDataToSend.append('stock', formData.stock)
       formDataToSend.append('brand', formData.brand)
       formDataToSend.append('color', colorArray.join(','))
       formDataToSend.append('size', sizeArray.join(','))
       formDataToSend.append('material', formData.material)
+      formDataToSend.append('manufacture_country', formData.manufactureCountry)
       formDataToSend.append('description', formData.description)
       formDataToSend.append('feature', formData.feature)
       formDataToSend.append('mainCategory', mainCategoryName) // Send name instead of ID
@@ -1291,6 +1381,29 @@ export default function ProductsPage() {
                       required
                     />
                   </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="nameEn">Барааны нэр (English) *</Label>
+                    <Input
+                      id="nameEn"
+                      value={formData.nameEn}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nameEn: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="youtubeUrl">YouTube Link</Label>
+                    <Input
+                      id="youtubeUrl"
+                      type="url"
+                      value={formData.youtubeUrl}
+                      onChange={(e) =>
+                        setFormData({ ...formData, youtubeUrl: e.target.value })
+                      }
+                      placeholder="https://www.youtube.com/watch?v=..."
+                    />
+                  </div>
 
                   {/* Product Code Field - Auto-generated */}
                   {formData.productCode && (
@@ -1440,22 +1553,16 @@ export default function ProductsPage() {
                           onChange={(e) => setSizeInput(e.target.value)}
                           placeholder="Enter size (e.g., M)"
                           onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
+                            if (e.key === "Enter") {
                               e.preventDefault()
-                              if (sizeInput.trim() && !sizes.includes(sizeInput.trim())) {
-                                setSizes([...sizes, sizeInput.trim()])
-                                setSizeInput("")
-                              }
+                              addSizesFromInput(sizeInput)
                             }
                           }}
                         />
                         <Button
                           type="button"
                           onClick={() => {
-                            if (sizeInput.trim() && !sizes.includes(sizeInput.trim())) {
-                              setSizes([...sizes, sizeInput.trim()])
-                              setSizeInput("")
-                            }
+                            addSizesFromInput(sizeInput)
                           }}
                           variant="outline"
                           size="icon"
@@ -1499,6 +1606,17 @@ export default function ProductsPage() {
                         required
                       />
                     </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="manufactureCountry">Үйлдвэрлэсэн улс (Manufacture Country)</Label>
+                    <Input
+                      id="manufactureCountry"
+                      value={formData.manufactureCountry}
+                      onChange={(e) =>
+                        setFormData({ ...formData, manufactureCountry: e.target.value })
+                      }
+                      placeholder="e.g., Mongolia"
+                    />
+                  </div>
                   </div>
 
                   <div className="grid gap-2">
@@ -1551,6 +1669,19 @@ export default function ProductsPage() {
                           setFormData({ ...formData, price: e.target.value })
                         }
                         required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="salePrice">Хямдралтай үнэ (Sale Price) (₮)</Label>
+                      <Input
+                        id="salePrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.salePrice}
+                        onChange={(e) =>
+                          setFormData({ ...formData, salePrice: e.target.value })
+                        }
                       />
                     </div>
                   </div>
@@ -1692,12 +1823,37 @@ export default function ProductsPage() {
                       {imagePreviews.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
                           {imagePreviews.map((preview, index) => (
-                            <div key={index} className="relative group">
+                            <div key={index} className="relative group overflow-hidden rounded-md border">
                               <img
                                 src={preview}
                                 alt={`Preview ${index + 1}`}
-                                className="w-full h-24 object-cover rounded-md border"
+                                className="w-full h-24 object-cover transition-transform duration-200 group-hover:scale-150"
+                                style={{
+                                  transformOrigin: `${(imageZoomOrigin[index]?.x ?? 50)}% ${(imageZoomOrigin[index]?.y ?? 50)}%`,
+                                }}
+                                onMouseMove={(event) => handlePreviewMouseMove(index, event)}
+                                onMouseLeave={() => handlePreviewMouseLeave(index)}
                               />
+                              <div className="absolute left-1 top-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={() => moveImagePreview(index, index - 1)}
+                                  className="rounded-full bg-background/80 p-1 shadow"
+                                  disabled={index === 0}
+                                  title="Move left"
+                                >
+                                  <ArrowLeft className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveImagePreview(index, index + 1)}
+                                  className="rounded-full bg-background/80 p-1 shadow"
+                                  disabled={index === imagePreviews.length - 1}
+                                  title="Move right"
+                                >
+                                  <ArrowRight className="h-3 w-3" />
+                                </button>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveImage(index)}

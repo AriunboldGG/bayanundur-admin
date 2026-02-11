@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Upload, XCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface MainCategory {
@@ -65,6 +65,7 @@ interface ProductSector {
   id: string
   name: string
   order?: number
+  imageUrl?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -105,6 +106,8 @@ export default function CategoriesPage() {
   const [isSectorDialogOpen, setIsSectorDialogOpen] = useState(false)
   const [editingSector, setEditingSector] = useState<ProductSector | null>(null)
   const [sectorFormData, setSectorFormData] = useState({ name: "" })
+  const [sectorImageFile, setSectorImageFile] = useState<File | null>(null)
+  const [sectorImagePreview, setSectorImagePreview] = useState("")
 
   // Fetch all data
   const fetchMainCategories = async () => {
@@ -471,9 +474,13 @@ export default function CategoriesPage() {
     if (sector) {
       setEditingSector(sector)
       setSectorFormData({ name: sector.name })
+      setSectorImagePreview(sector.imageUrl || "")
+      setSectorImageFile(null)
     } else {
       setEditingSector(null)
       setSectorFormData({ name: "" })
+      setSectorImagePreview("")
+      setSectorImageFile(null)
     }
     setIsSectorDialogOpen(true)
   }
@@ -482,6 +489,11 @@ export default function CategoriesPage() {
     setIsSectorDialogOpen(false)
     setEditingSector(null)
     setSectorFormData({ name: "" })
+    if (sectorImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(sectorImagePreview)
+    }
+    setSectorImagePreview("")
+    setSectorImageFile(null)
   }
 
   const handleSubmitSector = async () => {
@@ -496,10 +508,17 @@ export default function CategoriesPage() {
         : "/api/product-sectors"
       const method = editingSector ? "PUT" : "POST"
 
+      const formData = new FormData()
+      formData.append("name", sectorFormData.name.trim())
+      if (sectorImageFile) {
+        formData.append("image", sectorImageFile)
+      } else if (editingSector?.imageUrl) {
+        formData.append("image_url", editingSector.imageUrl)
+      }
+
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sectorFormData),
+        body: formData,
       })
 
       const result = await response.json()
@@ -527,6 +546,27 @@ export default function CategoriesPage() {
     } catch (err: any) {
       alert(err.message || "Failed to delete product sector")
     }
+  }
+
+  const handleSectorImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) return
+    if (sectorImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(sectorImagePreview)
+    }
+    const preview = URL.createObjectURL(file)
+    setSectorImagePreview(preview)
+    setSectorImageFile(file)
+    e.target.value = ""
+  }
+
+  const handleRemoveSectorImage = () => {
+    if (sectorImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(sectorImagePreview)
+    }
+    setSectorImagePreview("")
+    setSectorImageFile(null)
   }
 
   if (isLoading) {
@@ -1132,6 +1172,81 @@ export default function CategoriesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Product Sector Dialog */}
+      <Dialog open={isSectorDialogOpen} onOpenChange={setIsSectorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingSector ? "Edit Product Sector" : "Add Product Sector"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingSector ? "Update product sector details" : "Create a new product sector"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={sectorFormData.name}
+                onChange={(e) => setSectorFormData({ ...sectorFormData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Sector Image</Label>
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <input
+                    type="file"
+                    id="sector-image-upload"
+                    accept="image/*"
+                    onChange={handleSectorImageSelect}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="sector-image-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors border-primary/50 bg-muted/30 hover:bg-muted/50"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {sectorImagePreview
+                        ? "Зураг сонгогдсон"
+                        : "Зураг сонгох (Click to select image)"}
+                    </p>
+                  </label>
+                </div>
+                {sectorImagePreview && (
+                  <div className="relative mt-4 flex justify-center">
+                    <div className="relative group">
+                      <img
+                        src={sectorImagePreview}
+                        alt="Sector preview"
+                        className="w-32 h-32 object-cover rounded-md border"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveSectorImage}
+                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseSectorDialog}>
+              Хаах
+            </Button>
+            <Button onClick={handleSubmitSector}>
+              {editingSector ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Subcategory Dialog */}
       <Dialog open={isSubcategoryDialogOpen} onOpenChange={setIsSubcategoryDialogOpen}>
         <DialogContent>
@@ -1209,37 +1324,6 @@ export default function CategoriesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Product Sector Dialog */}
-      <Dialog open={isSectorDialogOpen} onOpenChange={setIsSectorDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingSector ? "Edit Product Sector" : "Add Product Sector"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingSector ? "Update product sector details" : "Create a new product sector"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Name *</Label>
-              <Input
-                value={sectorFormData.name}
-                onChange={(e) => setSectorFormData({ ...sectorFormData, name: e.target.value })}
-                placeholder="Enter name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseSectorDialog}>
-              Хаах
-            </Button>
-            <Button onClick={handleSubmitSector}>
-              {editingSector ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

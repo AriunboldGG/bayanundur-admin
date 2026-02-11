@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,12 +21,15 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, Upload, XCircle } from "lucide-react"
 
 type CompanyInfoItem = {
   id: string
   address?: string
   company_phone?: string
+  company_description?: string
+  company_image_url?: string
+  partners_images?: string[]
   email?: string
   fb?: string
   mobile_phone?: string
@@ -39,11 +42,17 @@ type CompanyInfoItem = {
 const emptyForm = {
   address: "",
   company_phone: "",
+  company_description: "",
   email: "",
   fb: "",
   mobile_phone: "",
   wechat: "",
   whatsup: "",
+}
+
+type PartnerImageItem = {
+  url: string
+  file?: File
 }
 
 export default function CompanyInfoPage() {
@@ -55,6 +64,10 @@ export default function CompanyInfoPage() {
   const [formData, setFormData] = useState({ ...emptyForm })
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [companyImageFile, setCompanyImageFile] = useState<File | null>(null)
+  const [companyImagePreview, setCompanyImagePreview] = useState("")
+  const [partnerImages, setPartnerImages] = useState<PartnerImageItem[]>([])
+  const partnerInputRef = useRef<HTMLInputElement | null>(null)
 
   const fetchCompanyInfo = async () => {
     try {
@@ -80,6 +93,9 @@ export default function CompanyInfoPage() {
   const openCreate = () => {
     setEditingItem(null)
     setFormData({ ...emptyForm })
+    setCompanyImageFile(null)
+    setCompanyImagePreview("")
+    setPartnerImages([])
     setIsDialogOpen(true)
   }
 
@@ -88,13 +104,65 @@ export default function CompanyInfoPage() {
     setFormData({
       address: item.address || "",
       company_phone: item.company_phone || "",
+      company_description: item.company_description || "",
       email: item.email || "",
       fb: item.fb || "",
       mobile_phone: item.mobile_phone || "",
       wechat: item.wechat || "",
       whatsup: item.whatsup || "",
     })
+    setCompanyImageFile(null)
+    setCompanyImagePreview(item.company_image_url || "")
+    setPartnerImages((item.partners_images || []).map((url) => ({ url })))
     setIsDialogOpen(true)
+  }
+
+  const handleCompanyImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !file.type.startsWith("image/")) return
+    if (companyImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(companyImagePreview)
+    }
+    const preview = URL.createObjectURL(file)
+    setCompanyImageFile(file)
+    setCompanyImagePreview(preview)
+    event.target.value = ""
+  }
+
+  const handleRemoveCompanyImage = () => {
+    if (companyImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(companyImagePreview)
+    }
+    setCompanyImageFile(null)
+    setCompanyImagePreview("")
+  }
+
+  const handlePartnerImagesSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files) return
+    const newItems: PartnerImageItem[] = []
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const preview = URL.createObjectURL(file)
+        newItems.push({ url: preview, file })
+      }
+    })
+    if (newItems.length) {
+      setPartnerImages((prev) => [...prev, ...newItems])
+    }
+    event.target.value = ""
+  }
+
+  const handleRemovePartnerImage = (index: number) => {
+    setPartnerImages((prev) => {
+      const updated = [...prev]
+      const removed = updated[index]
+      if (removed?.url && removed.url.startsWith("blob:")) {
+        URL.revokeObjectURL(removed.url)
+      }
+      updated.splice(index, 1)
+      return updated
+    })
   }
 
   const handleSave = async () => {
@@ -102,10 +170,33 @@ export default function CompanyInfoPage() {
     try {
       const url = editingItem ? `/api/company-info/${editingItem.id}` : "/api/company-info"
       const method = editingItem ? "PUT" : "POST"
+      const payload = new FormData()
+      payload.append("address", formData.address)
+      payload.append("company_phone", formData.company_phone)
+      payload.append("company_description", formData.company_description)
+      payload.append("email", formData.email)
+      payload.append("fb", formData.fb)
+      payload.append("mobile_phone", formData.mobile_phone)
+      payload.append("wechat", formData.wechat)
+      payload.append("whatsup", formData.whatsup)
+
+      if (companyImageFile) {
+        payload.append("company_image", companyImageFile)
+      } else if (editingItem?.company_image_url) {
+        payload.append("company_image_url", editingItem.company_image_url)
+      }
+
+      const existingPartners = partnerImages.filter((item) => !item.file).map((item) => item.url)
+      payload.append("partners_existing", JSON.stringify(existingPartners))
+      partnerImages.forEach((item) => {
+        if (item.file) {
+          payload.append("partners_images", item.file)
+        }
+      })
+
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: payload,
       })
       const result = await response.json()
       if (!response.ok || !result.success) {
@@ -113,6 +204,17 @@ export default function CompanyInfoPage() {
       }
       setIsDialogOpen(false)
       setEditingItem(null)
+      if (companyImagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(companyImagePreview)
+      }
+      partnerImages.forEach((item) => {
+        if (item.url.startsWith("blob:")) {
+          URL.revokeObjectURL(item.url)
+        }
+      })
+      setCompanyImageFile(null)
+      setCompanyImagePreview("")
+      setPartnerImages([])
       await fetchCompanyInfo()
     } catch (err: any) {
       alert(err?.message || "Failed to save company info")
@@ -173,12 +275,15 @@ export default function CompanyInfoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Address</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead>Company Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Facebook</TableHead>
                     <TableHead>Mobile Phone</TableHead>
                     <TableHead>WeChat</TableHead>
                     <TableHead>WhatsApp</TableHead>
+                    <TableHead>Image</TableHead>
+                    <TableHead>Partners</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -186,12 +291,25 @@ export default function CompanyInfoPage() {
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="min-w-[200px]">{item.address || "-"}</TableCell>
+                      <TableCell className="min-w-[200px]">{item.company_description || "-"}</TableCell>
                       <TableCell>{item.company_phone || "-"}</TableCell>
                       <TableCell>{item.email || "-"}</TableCell>
                       <TableCell>{item.fb || "-"}</TableCell>
                       <TableCell>{item.mobile_phone || "-"}</TableCell>
                       <TableCell>{item.wechat || "-"}</TableCell>
                       <TableCell>{item.whatsup || "-"}</TableCell>
+                      <TableCell>
+                        {item.company_image_url ? (
+                          <img
+                            src={item.company_image_url}
+                            alt="Company"
+                            className="h-10 w-10 rounded object-cover"
+                          />
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                      <TableCell>{item.partners_images?.length ?? 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -229,7 +347,7 @@ export default function CompanyInfoPage() {
           setIsDialogOpen(open)
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Company Info" : "Create Company Info"}</DialogTitle>
             <DialogDescription>Fill in the company info fields and save.</DialogDescription>
@@ -242,6 +360,16 @@ export default function CompanyInfoPage() {
                 value={formData.address}
                 onChange={(event) => setFormData({ ...formData, address: event.target.value })}
                 placeholder="Company address"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="company_description">Company Description</Label>
+              <textarea
+                id="company_description"
+                value={formData.company_description}
+                onChange={(event) => setFormData({ ...formData, company_description: event.target.value })}
+                placeholder="Company description"
+                className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
             <div className="space-y-2">
@@ -298,6 +426,101 @@ export default function CompanyInfoPage() {
                 onChange={(event) => setFormData({ ...formData, whatsup: event.target.value })}
                 placeholder="WhatsApp"
               />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Company Image</Label>
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <input
+                    type="file"
+                    id="company-image-upload"
+                    accept="image/*"
+                    onChange={handleCompanyImageSelect}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="company-image-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors border-primary/50 bg-muted/30 hover:bg-muted/50"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {companyImagePreview ? "Зураг сонгогдсон" : "Зураг сонгох (Click to select image)"}
+                    </p>
+                  </label>
+                </div>
+                {companyImagePreview && (
+                  <div className="relative mt-4 flex justify-center">
+                    <div className="relative group">
+                      <img
+                        src={companyImagePreview}
+                        alt="Company preview"
+                        className="h-32 w-32 rounded-md object-cover border"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveCompanyImage}
+                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Partners (Images)</Label>
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <input
+                    type="file"
+                    id="partners-images-upload"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePartnerImagesSelect}
+                    className="hidden"
+                    ref={partnerInputRef}
+                  />
+                  <label
+                    htmlFor="partners-images-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors border-primary/50 bg-muted/30 hover:bg-muted/50"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {partnerImages.length > 0
+                        ? `${partnerImages.length} зураг сонгогдсон`
+                        : "Зураг сонгох (Click to select images)"}
+                    </p>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => partnerInputRef.current?.click()}
+                  >
+                    Add Partner Image
+                  </Button>
+                </div>
+                {partnerImages.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {partnerImages.map((item, index) => (
+                      <div key={`${item.url}-${index}`} className="relative group">
+                        <img
+                          src={item.url}
+                          alt={`Partner ${index + 1}`}
+                          className="h-24 w-full rounded-md object-cover border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePartnerImage(index)}
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>

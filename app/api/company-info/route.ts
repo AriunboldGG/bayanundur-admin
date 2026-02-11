@@ -1,7 +1,45 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/firebase-admin"
+import { db, getStorageBucket } from "@/lib/firebase-admin"
 
 const COLLECTION = "companyInfo"
+
+async function uploadImageToStorage(file: File): Promise<string> {
+  let bucket
+  try {
+    bucket = getStorageBucket()
+    const [exists] = await bucket.exists()
+    if (!exists) {
+      await bucket.create()
+    }
+  } catch (error: any) {
+    console.error("Error accessing storage bucket:", error)
+    const bucketName = bucket?.name || "unknown"
+    throw new Error(`Storage bucket error (${bucketName}): ${error.message || "Bucket not accessible."}`)
+  }
+
+  const timestamp = Date.now()
+  const randomString = Math.random().toString(36).substring(2, 15)
+  const fileExtension = file.name.split(".").pop()
+  const fileName = `company_info/${timestamp}-${randomString}.${fileExtension}`
+
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const fileRef = bucket.file(fileName)
+  await fileRef.save(buffer, {
+    metadata: {
+      contentType: file.type,
+    },
+  })
+  await fileRef.makePublic()
+
+  return `https://storage.googleapis.com/${bucket.name}/${fileName}`
+}
+
+async function uploadImagesToStorage(files: File[]): Promise<string[]> {
+  const uploads = files.map((file) => uploadImageToStorage(file))
+  return Promise.all(uploads)
+}
 
 export async function GET() {
   try {
@@ -19,19 +57,63 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
     const now = new Date().toISOString()
+    const contentType = request.headers.get("content-type") || ""
+    let payload: Record<string, any> = {}
 
-    const payload = {
-      address: String(body?.address || "").trim(),
-      company_phone: String(body?.company_phone || "").trim(),
-      email: String(body?.email || "").trim(),
-      fb: String(body?.fb || "").trim(),
-      mobile_phone: String(body?.mobile_phone || "").trim(),
-      wechat: String(body?.wechat || "").trim(),
-      whatsup: String(body?.whatsup || "").trim(),
-      createdAt: now,
-      updatedAt: now,
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData()
+      const companyImage = formData.get("company_image") as File | null
+      const partnersImages = formData.getAll("partners_images") as File[]
+      const partnersExisting = (formData.get("partners_existing") as string) || "[]"
+
+      let companyImageUrl = (formData.get("company_image_url") as string) || ""
+      if (companyImage && companyImage instanceof File && companyImage.type.startsWith("image/")) {
+        companyImageUrl = await uploadImageToStorage(companyImage)
+      }
+
+      let partnersUrls: string[] = []
+      try {
+        partnersUrls = JSON.parse(partnersExisting)
+      } catch {
+        partnersUrls = []
+      }
+      const partnerUploads = partnersImages.filter((file) => file.type.startsWith("image/"))
+      if (partnerUploads.length) {
+        const uploadedUrls = await uploadImagesToStorage(partnerUploads)
+        partnersUrls = [...partnersUrls, ...uploadedUrls]
+      }
+
+      payload = {
+        address: String(formData.get("address") || "").trim(),
+        company_phone: String(formData.get("company_phone") || "").trim(),
+        company_description: String(formData.get("company_description") || "").trim(),
+        company_image_url: companyImageUrl,
+        partners_images: partnersUrls,
+        email: String(formData.get("email") || "").trim(),
+        fb: String(formData.get("fb") || "").trim(),
+        mobile_phone: String(formData.get("mobile_phone") || "").trim(),
+        wechat: String(formData.get("wechat") || "").trim(),
+        whatsup: String(formData.get("whatsup") || "").trim(),
+        createdAt: now,
+        updatedAt: now,
+      }
+    } else {
+      const body = await request.json()
+      payload = {
+        address: String(body?.address || "").trim(),
+        company_phone: String(body?.company_phone || "").trim(),
+        company_description: String(body?.company_description || "").trim(),
+        company_image_url: String(body?.company_image_url || "").trim(),
+        partners_images: Array.isArray(body?.partners_images) ? body.partners_images : [],
+        email: String(body?.email || "").trim(),
+        fb: String(body?.fb || "").trim(),
+        mobile_phone: String(body?.mobile_phone || "").trim(),
+        wechat: String(body?.wechat || "").trim(),
+        whatsup: String(body?.whatsup || "").trim(),
+        createdAt: now,
+        updatedAt: now,
+      }
     }
 
     const docRef = await db.collection(COLLECTION).add(payload)

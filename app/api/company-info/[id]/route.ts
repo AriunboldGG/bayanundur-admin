@@ -1,7 +1,45 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/firebase-admin"
+import { db, getStorageBucket } from "@/lib/firebase-admin"
 
 const COLLECTION = "companyInfo"
+
+async function uploadImageToStorage(file: File): Promise<string> {
+  let bucket
+  try {
+    bucket = getStorageBucket()
+    const [exists] = await bucket.exists()
+    if (!exists) {
+      await bucket.create()
+    }
+  } catch (error: any) {
+    console.error("Error accessing storage bucket:", error)
+    const bucketName = bucket?.name || "unknown"
+    throw new Error(`Storage bucket error (${bucketName}): ${error.message || "Bucket not accessible."}`)
+  }
+
+  const timestamp = Date.now()
+  const randomString = Math.random().toString(36).substring(2, 15)
+  const fileExtension = file.name.split(".").pop()
+  const fileName = `company_info/${timestamp}-${randomString}.${fileExtension}`
+
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const fileRef = bucket.file(fileName)
+  await fileRef.save(buffer, {
+    metadata: {
+      contentType: file.type,
+    },
+  })
+  await fileRef.makePublic()
+
+  return `https://storage.googleapis.com/${bucket.name}/${fileName}`
+}
+
+async function uploadImagesToStorage(files: File[]): Promise<string[]> {
+  const uploads = files.map((file) => uploadImageToStorage(file))
+  return Promise.all(uploads)
+}
 
 export async function GET(
   request: NextRequest,
@@ -31,19 +69,59 @@ export async function PUT(
   try {
     const resolvedParams = params instanceof Promise ? await params : params
     const { id } = resolvedParams
-    const body = await request.json()
-
-    const updateData: Record<string, string> = {
+    const contentType = request.headers.get("content-type") || ""
+    const updateData: Record<string, any> = {
       updatedAt: new Date().toISOString(),
     }
 
-    if (body?.address !== undefined) updateData.address = String(body.address).trim()
-    if (body?.company_phone !== undefined) updateData.company_phone = String(body.company_phone).trim()
-    if (body?.email !== undefined) updateData.email = String(body.email).trim()
-    if (body?.fb !== undefined) updateData.fb = String(body.fb).trim()
-    if (body?.mobile_phone !== undefined) updateData.mobile_phone = String(body.mobile_phone).trim()
-    if (body?.wechat !== undefined) updateData.wechat = String(body.wechat).trim()
-    if (body?.whatsup !== undefined) updateData.whatsup = String(body.whatsup).trim()
+    const existingDoc = await db.collection(COLLECTION).doc(id).get()
+    const existingData = existingDoc.exists ? existingDoc.data() : {}
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData()
+      if (formData.has("address")) updateData.address = String(formData.get("address") || "").trim()
+      if (formData.has("company_phone")) updateData.company_phone = String(formData.get("company_phone") || "").trim()
+      if (formData.has("company_description")) updateData.company_description = String(formData.get("company_description") || "").trim()
+      if (formData.has("email")) updateData.email = String(formData.get("email") || "").trim()
+      if (formData.has("fb")) updateData.fb = String(formData.get("fb") || "").trim()
+      if (formData.has("mobile_phone")) updateData.mobile_phone = String(formData.get("mobile_phone") || "").trim()
+      if (formData.has("wechat")) updateData.wechat = String(formData.get("wechat") || "").trim()
+      if (formData.has("whatsup")) updateData.whatsup = String(formData.get("whatsup") || "").trim()
+
+      let companyImageUrl = (formData.get("company_image_url") as string) || (existingData?.company_image_url || "")
+      const companyImage = formData.get("company_image") as File | null
+      if (companyImage && companyImage instanceof File && companyImage.type.startsWith("image/")) {
+        companyImageUrl = await uploadImageToStorage(companyImage)
+      }
+      updateData.company_image_url = companyImageUrl
+
+      const partnersExisting = (formData.get("partners_existing") as string) || "[]"
+      let partnersUrls: string[] = []
+      try {
+        partnersUrls = JSON.parse(partnersExisting)
+      } catch {
+        partnersUrls = Array.isArray(existingData?.partners_images) ? existingData.partners_images : []
+      }
+      const partnersImages = formData.getAll("partners_images") as File[]
+      const partnerUploads = partnersImages.filter((file) => file.type.startsWith("image/"))
+      if (partnerUploads.length) {
+        const uploadedUrls = await uploadImagesToStorage(partnerUploads)
+        partnersUrls = [...partnersUrls, ...uploadedUrls]
+      }
+      updateData.partners_images = partnersUrls
+    } else {
+      const body = await request.json()
+      if (body?.address !== undefined) updateData.address = String(body.address).trim()
+      if (body?.company_phone !== undefined) updateData.company_phone = String(body.company_phone).trim()
+      if (body?.company_description !== undefined) updateData.company_description = String(body.company_description).trim()
+      if (body?.email !== undefined) updateData.email = String(body.email).trim()
+      if (body?.fb !== undefined) updateData.fb = String(body.fb).trim()
+      if (body?.mobile_phone !== undefined) updateData.mobile_phone = String(body.mobile_phone).trim()
+      if (body?.wechat !== undefined) updateData.wechat = String(body.wechat).trim()
+      if (body?.whatsup !== undefined) updateData.whatsup = String(body.whatsup).trim()
+      if (body?.company_image_url !== undefined) updateData.company_image_url = String(body.company_image_url).trim()
+      if (body?.partners_images !== undefined) updateData.partners_images = Array.isArray(body.partners_images) ? body.partners_images : []
+    }
 
     await db.collection(COLLECTION).doc(id).update(updateData)
     const updatedDoc = await db.collection(COLLECTION).doc(id).get()

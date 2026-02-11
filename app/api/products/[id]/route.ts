@@ -207,12 +207,18 @@ export async function PUT(
       const productSectorValue = formData.get("product_sector")
       productData = {
         name: formData.get("name") as string,
+        name_en: (formData.get("name_en") as string) || "",
+        youtube_url: (formData.get("youtube_url") as string) || "",
         price: parseFloat(formData.get("price") as string),
+        sale_price: formData.get("sale_price")
+          ? parseFloat(formData.get("sale_price") as string)
+          : undefined,
         stock: parseInt(formData.get("stock") as string),
         brand: formData.get("brand") as string,
         color: colorValue ? colorValue.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : [],
         size: sizeValue ? sizeValue.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [],
         material: formData.get("material") as string || "",
+        manufacture_country: formData.get("manufacture_country") as string || "",
         description: formData.get("description") as string || "",
         feature: formData.get("feature") as string || "",
         mainCategory: formData.get("mainCategory") as string || "",
@@ -269,11 +275,15 @@ export async function PUT(
       const body = await request.json();
       const { 
         name, 
+        name_en,
+        youtube_url,
         price, 
+        sale_price,
         stock, 
         brand, 
         color, 
         size, 
+        manufacture_country,
         category, 
         subcategory, 
         product_sector,
@@ -290,12 +300,18 @@ export async function PUT(
 
       productData = {
         name,
+        name_en: name_en || "",
+        youtube_url: youtube_url || "",
         price: typeof price === 'number' ? price : parseFloat(price),
+        sale_price: sale_price !== undefined && sale_price !== null && sale_price !== ""
+          ? (typeof sale_price === 'number' ? sale_price : parseFloat(sale_price))
+          : undefined,
         stock: typeof stock === 'number' ? stock : parseInt(stock),
         brand,
         color: Array.isArray(color) ? color : (color ? color.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0) : []),
         size: Array.isArray(size) ? size : (size ? size.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : []),
         material: material || "",
+        manufacture_country: manufacture_country || "",
         description: description || "",
         feature: feature || "",
         mainCategory: mainCategory || "",
@@ -309,6 +325,10 @@ export async function PUT(
         images: images || [],
         updatedAt: new Date().toISOString(),
       };
+    }
+
+    if (productData.sale_price === undefined) {
+      delete productData.sale_price
     }
 
     await db.collection("products").doc(id).update(productData);

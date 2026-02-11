@@ -728,7 +728,7 @@ export default function QuotesPage() {
   const handleProductStatusChange = async (
     quoteId: string,
     productId: string,
-    newStatus: "sent_offer" | "create_invoice" | "spent"
+    newStatus: "sent_offer" | "create_invoice" | "spent" | "pending"
   ): Promise<void> => {
     try {
       // Find the quote and update the product status
@@ -740,9 +740,14 @@ export default function QuotesPage() {
       const updatedProducts = quote.selectedProducts.map((product, index) => {
         const resolvedProductId = getProductKey(product, index)
         if (!resolvedProductId) return product
-        return resolvedProductId === productId
-          ? { ...product, productId: resolvedProductId, status: newStatus, status_type: newStatus }
-          : { ...product, productId: resolvedProductId }
+        if (resolvedProductId !== productId) {
+          return { ...product, productId: resolvedProductId }
+        }
+        if (newStatus === "pending") {
+          const { status, status_type, ...rest } = product as any
+          return { ...rest, productId: resolvedProductId }
+        }
+        return { ...product, productId: resolvedProductId, status: newStatus, status_type: newStatus }
       })
       const newQuoteStatus = calculateQuoteStatus(updatedProducts)
 
@@ -779,6 +784,67 @@ export default function QuotesPage() {
       alert("Failed to update product status. Please try again.")
       throw err // Re-throw to allow Promise.all to handle errors
     }
+  }
+
+  const getStatusFromSelections = (
+    isSendOffer: boolean,
+    isInvoice: boolean,
+    isSpent: boolean
+  ): "sent_offer" | "create_invoice" | "spent" | "pending" => {
+    if (isSpent) return "spent"
+    if (isInvoice) return "create_invoice"
+    if (isSendOffer) return "sent_offer"
+    return "pending"
+  }
+
+  const handleProductSelectionChange = async (
+    productId: string,
+    update: Partial<{ sendOffer: boolean; invoice: boolean; spent: boolean }>
+  ) => {
+    if (!selectedQuote?.id) return
+
+    let nextSendOffer = update.sendOffer ?? selectedForSendOffer.has(productId)
+    let nextInvoice = update.invoice ?? selectedForInvoice.has(productId)
+    let nextSpent = update.spent ?? selectedForSpent.has(productId)
+
+    if (nextSpent) {
+      nextInvoice = true
+      nextSendOffer = true
+    } else if (nextInvoice) {
+      nextSendOffer = true
+    } else if (!nextSendOffer) {
+      nextInvoice = false
+      nextSpent = false
+    }
+
+    const nextSendOfferSet = new Set(selectedForSendOffer)
+    const nextInvoiceSet = new Set(selectedForInvoice)
+    const nextSpentSet = new Set(selectedForSpent)
+
+    if (nextSendOffer) {
+      nextSendOfferSet.add(productId)
+    } else {
+      nextSendOfferSet.delete(productId)
+    }
+
+    if (nextInvoice) {
+      nextInvoiceSet.add(productId)
+    } else {
+      nextInvoiceSet.delete(productId)
+    }
+
+    if (nextSpent) {
+      nextSpentSet.add(productId)
+    } else {
+      nextSpentSet.delete(productId)
+    }
+
+    setSelectedForSendOffer(nextSendOfferSet)
+    setSelectedForInvoice(nextInvoiceSet)
+    setSelectedForSpent(nextSpentSet)
+
+    const nextStatus = getStatusFromSelections(nextSendOffer, nextInvoice, nextSpent)
+    await handleProductStatusChange(selectedQuote.id, productId, nextStatus)
   }
 
   const handleQuoteStatusChange = async (quoteId: string, newStatus: "new" | "pending" | "in_progress" | "completed" | "rejected") => {
@@ -2455,13 +2521,7 @@ export default function QuotesPage() {
                                   type="checkbox"
                                   checked={selectedForSendOffer.has(productId)}
                                   onChange={(e) => {
-                                    const newSet = new Set(selectedForSendOffer)
-                                    if (e.target.checked) {
-                                      newSet.add(productId)
-                                    } else {
-                                      newSet.delete(productId)
-                                    }
-                                    setSelectedForSendOffer(newSet)
+                                    handleProductSelectionChange(productId, { sendOffer: e.target.checked })
                                   }}
                                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                 />
@@ -2471,13 +2531,7 @@ export default function QuotesPage() {
                                   type="checkbox"
                                   checked={selectedForInvoice.has(productId)}
                                   onChange={(e) => {
-                                    const newSet = new Set(selectedForInvoice)
-                                    if (e.target.checked) {
-                                      newSet.add(productId)
-                                    } else {
-                                      newSet.delete(productId)
-                                    }
-                                    setSelectedForInvoice(newSet)
+                                    handleProductSelectionChange(productId, { invoice: e.target.checked })
                                   }}
                                   className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
                                 />
@@ -2487,13 +2541,7 @@ export default function QuotesPage() {
                                   type="checkbox"
                                   checked={selectedForSpent.has(productId)}
                                   onChange={(e) => {
-                                    const newSet = new Set(selectedForSpent)
-                                    if (e.target.checked) {
-                                      newSet.add(productId)
-                                    } else {
-                                      newSet.delete(productId)
-                                    }
-                                    setSelectedForSpent(newSet)
+                                    handleProductSelectionChange(productId, { spent: e.target.checked })
                                   }}
                                   className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
                                 />
@@ -3260,22 +3308,6 @@ export default function QuotesPage() {
                 // Handle save action - update status to create_invoice
                 if (selectedQuote) {
                   try {
-                    const missingDeliveryTime = selectedQuote.selectedProducts.filter((product, index) => {
-                      const productId = getProductKey(product, index)
-                      if (!productId || !selectedForInvoice.has(productId)) return false
-                      const deliveryTime =
-                        invoiceDeliveryTimes[productId] ??
-                        (product as any).delivery_time ??
-                        (product as any).deliveryTime ??
-                        ""
-                      return !deliveryTime
-                    })
-
-                    if (missingDeliveryTime.length > 0) {
-                      alert("Нийлүүлэх хугацаа заавал бөглөнө үү.")
-                      return
-                    }
-
                     const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
                       const productId = getProductKey(product, index)
                       if (!productId) return product

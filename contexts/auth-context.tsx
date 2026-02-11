@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true)
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      await signInWithEmailAndPassword(auth, email, password)
       // Login successful - onAuthStateChanged will update the user state
       return true
     } catch (error: any) {
