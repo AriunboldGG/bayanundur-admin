@@ -66,11 +66,14 @@ export async function POST(request: NextRequest) {
       const companyImage = formData.get("company_image") as File | null
       const partnersImages = formData.getAll("partners_images") as File[]
       const partnersExisting = (formData.get("partners_existing") as string) || "[]"
+      const riimImages = formData.getAll("riim_images") as File[]
+      const riimExisting = (formData.get("riim_existing") as string) || "[]"
 
       let companyImageUrl = (formData.get("company_image_url") as string) || ""
       if (companyImage && companyImage instanceof File && companyImage.type.startsWith("image/")) {
         companyImageUrl = await uploadImageToStorage(companyImage)
       }
+
 
       let partnersUrls: string[] = []
       try {
@@ -84,12 +87,26 @@ export async function POST(request: NextRequest) {
         partnersUrls = [...partnersUrls, ...uploadedUrls]
       }
 
+      let riimUrls: string[] = []
+      try {
+        riimUrls = JSON.parse(riimExisting)
+      } catch {
+        riimUrls = []
+      }
+      const riimUploads = riimImages.filter((file) => file.type.startsWith("image/"))
+      if (riimUploads.length) {
+        const uploadedUrls = await uploadImagesToStorage(riimUploads)
+        riimUrls = [...riimUrls, ...uploadedUrls].slice(0, 3)
+      }
+
       payload = {
         address: String(formData.get("address") || "").trim(),
         company_phone: String(formData.get("company_phone") || "").trim(),
         company_description: String(formData.get("company_description") || "").trim(),
+        delivery_info: String(formData.get("delivery_info") || "").trim(),
         company_image_url: companyImageUrl,
         partners_images: partnersUrls,
+        riim_images: riimUrls,
         email: String(formData.get("email") || "").trim(),
         fb: String(formData.get("fb") || "").trim(),
         mobile_phone: String(formData.get("mobile_phone") || "").trim(),
@@ -104,8 +121,10 @@ export async function POST(request: NextRequest) {
         address: String(body?.address || "").trim(),
         company_phone: String(body?.company_phone || "").trim(),
         company_description: String(body?.company_description || "").trim(),
+        delivery_info: String(body?.delivery_info || "").trim(),
         company_image_url: String(body?.company_image_url || "").trim(),
         partners_images: Array.isArray(body?.partners_images) ? body.partners_images : [],
+        riim_images: Array.isArray(body?.riim_images) ? body.riim_images.slice(0, 3) : [],
         email: String(body?.email || "").trim(),
         fb: String(body?.fb || "").trim(),
         mobile_phone: String(body?.mobile_phone || "").trim(),

@@ -86,7 +86,7 @@ interface SubcategoryItem {
 const buildCategoryId = (mainCategoryId: string, name: string) => `${mainCategoryId}::${name}`
 const parseCategoryName = (categoryId: string) => categoryId.split("::").slice(1).join("::") || categoryId
 
-const PRICE_DECIMALS = 3
+const PRICE_DECIMALS = 0
 const roundToThousandth = (value: number): number => {
   const factor = 10 ** PRICE_DECIMALS
   if (!Number.isFinite(value)) return 0
@@ -996,6 +996,20 @@ export default function ProductsPage() {
     }
   }
 
+  const handleResetProductCodeCounter = async () => {
+    if (!confirm("Барааны кодын тоолуурыг 0000001-ээс эхлүүлэх үү?")) return
+    try {
+      const response = await fetch("/api/products/reset-code-counter", { method: "POST" })
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || "Failed to reset product code counter")
+      }
+      alert("Барааны кодын тоолуур шинэчлэгдлээ. Дараагийн бараа BK-0000001 болно.")
+    } catch (err: any) {
+      alert(err?.message || "Failed to reset product code counter")
+    }
+  }
+
   // Get unique categories from products
   const uniqueCategories = Array.from(
     new Set(products.map((p) => p.category).filter(Boolean))
@@ -1046,10 +1060,15 @@ export default function ProductsPage() {
             </p>
           )}
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Бараа нэмэх
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleResetProductCodeCounter}>
+            Код тоолуур тэглэх
+          </Button>
+          <Button onClick={() => handleOpenDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Бараа нэмэх
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -1213,7 +1232,7 @@ export default function ProductsPage() {
                     return (
                       <TableRow key={product.id}>
                         <TableCell className="text-center">{index + 1}</TableCell>
-                        <TableCell className="font-mono">{product.product_code || "-"}</TableCell>
+                        <TableCell className="font-mono whitespace-nowrap">{product.product_code || "-"}</TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell>{product.brand}</TableCell>
                         <TableCell>{mainCategoryDisplay}</TableCell>
@@ -1689,10 +1708,10 @@ export default function ProductsPage() {
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="price">Үнэ (Price) (₮) *</Label>
-                      <Input
+      <Input
                         id="price"
                         type="number"
-                        step="0.001"
+        step="1"
                         min="0"
                         value={formData.price}
                         onChange={(e) =>
@@ -1706,10 +1725,10 @@ export default function ProductsPage() {
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="salePrice">Хямдралтай үнэ (Sale Price) (₮)</Label>
-                      <Input
+      <Input
                         id="salePrice"
                         type="number"
-                        step="0.001"
+        step="1"
                         min="0"
                         value={formData.salePrice}
                         onChange={(e) =>

@@ -82,6 +82,7 @@ export async function PUT(
       if (formData.has("address")) updateData.address = String(formData.get("address") || "").trim()
       if (formData.has("company_phone")) updateData.company_phone = String(formData.get("company_phone") || "").trim()
       if (formData.has("company_description")) updateData.company_description = String(formData.get("company_description") || "").trim()
+      if (formData.has("delivery_info")) updateData.delivery_info = String(formData.get("delivery_info") || "").trim()
       if (formData.has("email")) updateData.email = String(formData.get("email") || "").trim()
       if (formData.has("fb")) updateData.fb = String(formData.get("fb") || "").trim()
       if (formData.has("mobile_phone")) updateData.mobile_phone = String(formData.get("mobile_phone") || "").trim()
@@ -95,7 +96,9 @@ export async function PUT(
       }
       updateData.company_image_url = companyImageUrl
 
+
       const partnersExisting = (formData.get("partners_existing") as string) || "[]"
+      const riimExisting = (formData.get("riim_existing") as string) || "[]"
       let partnersUrls: string[] = []
       try {
         partnersUrls = JSON.parse(partnersExisting)
@@ -109,11 +112,26 @@ export async function PUT(
         partnersUrls = [...partnersUrls, ...uploadedUrls]
       }
       updateData.partners_images = partnersUrls
+
+      let riimUrls: string[] = []
+      try {
+        riimUrls = JSON.parse(riimExisting)
+      } catch {
+        riimUrls = Array.isArray(existingData?.riim_images) ? existingData.riim_images : []
+      }
+      const riimImages = formData.getAll("riim_images") as File[]
+      const riimUploads = riimImages.filter((file) => file.type.startsWith("image/"))
+      if (riimUploads.length) {
+        const uploadedUrls = await uploadImagesToStorage(riimUploads)
+        riimUrls = [...riimUrls, ...uploadedUrls].slice(0, 3)
+      }
+      updateData.riim_images = riimUrls
     } else {
       const body = await request.json()
       if (body?.address !== undefined) updateData.address = String(body.address).trim()
       if (body?.company_phone !== undefined) updateData.company_phone = String(body.company_phone).trim()
       if (body?.company_description !== undefined) updateData.company_description = String(body.company_description).trim()
+      if (body?.delivery_info !== undefined) updateData.delivery_info = String(body.delivery_info).trim()
       if (body?.email !== undefined) updateData.email = String(body.email).trim()
       if (body?.fb !== undefined) updateData.fb = String(body.fb).trim()
       if (body?.mobile_phone !== undefined) updateData.mobile_phone = String(body.mobile_phone).trim()
@@ -121,6 +139,9 @@ export async function PUT(
       if (body?.whatsup !== undefined) updateData.whatsup = String(body.whatsup).trim()
       if (body?.company_image_url !== undefined) updateData.company_image_url = String(body.company_image_url).trim()
       if (body?.partners_images !== undefined) updateData.partners_images = Array.isArray(body.partners_images) ? body.partners_images : []
+      if (body?.riim_images !== undefined) {
+        updateData.riim_images = Array.isArray(body.riim_images) ? body.riim_images.slice(0, 3) : []
+      }
     }
 
     await db.collection(COLLECTION).doc(id).update(updateData)

@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2, Mail } from "lucide-react"
+import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2, Mail, Loader2 } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
 import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType, BorderStyle } from "docx"
 import { saveAs } from "file-saver"
@@ -103,6 +103,9 @@ export default function QuotesPage() {
   const [buyerRegNumber, setBuyerRegNumber] = useState<string>("")
   const [sendOfferQuantities, setSendOfferQuantities] = useState<Record<string, number>>({})
   const [sendOfferDeliveryTimes, setSendOfferDeliveryTimes] = useState<Record<string, string>>({})
+  const [isSavingSendOffer, setIsSavingSendOffer] = useState(false)
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false)
+  const [isSavingSpent, setIsSavingSpent] = useState(false)
 
   // Generate quote number when dialog opens
   useEffect(() => {
@@ -1272,19 +1275,10 @@ export default function QuotesPage() {
                   new DocxTableCell({
                     children: [new Paragraph({
                       children: [
-                        new TextRun({ text: "Тэмдэг: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                  }),
-                  new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
                         new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                        new TextRun({ text: "_________________ / _________________ / _________________" }),
                       ],
                     })],
-                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    width: { size: 100, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
@@ -1618,19 +1612,10 @@ export default function QuotesPage() {
                   new DocxTableCell({
                     children: [new Paragraph({
                       children: [
-                        new TextRun({ text: "Тэмдэг: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                  }),
-                  new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
                         new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                        new TextRun({ text: "_________________ / _________________ / _________________" }),
                       ],
                     })],
-                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    width: { size: 100, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
@@ -1917,19 +1902,10 @@ export default function QuotesPage() {
                   new DocxTableCell({
                     children: [new Paragraph({
                       children: [
-                        new TextRun({ text: "Тэмдэг: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 30, type: WidthType.PERCENTAGE },
-                  }),
-                  new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
                         new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                        new TextRun({ text: "_________________ / _________________ / _________________" }),
                       ],
                     })],
-                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    width: { size: 100, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
@@ -2711,7 +2687,13 @@ export default function QuotesPage() {
       </Dialog>
 
       {/* Send Offer Form Dialog */}
-      <Dialog open={isSendOfferDialogOpen} onOpenChange={setIsSendOfferDialogOpen}>
+      <Dialog
+        open={isSendOfferDialogOpen}
+        onOpenChange={(open) => {
+          if (isSavingSendOffer) return
+          setIsSendOfferDialogOpen(open)
+        }}
+      >
         <DialogContent className="max-w-[95vw] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Үнийн санал илгээх форм</DialogTitle>
@@ -2973,13 +2955,18 @@ export default function QuotesPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsSendOfferDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsSendOfferDialogOpen(false)}
+              disabled={isSavingSendOffer}
+            >
               Хаах
             </Button>
             <Button
               onClick={async () => {
                 // Handle save action - update status to sent_offer and save Компанийн тэмдэглэл and company info
                 if (selectedQuote) {
+                  setIsSavingSendOffer(true)
                   try {
                     // Update selected products with new quantities and delivery times
                     const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
@@ -3052,15 +3039,27 @@ export default function QuotesPage() {
                   } catch (error) {
                     console.error("Error saving offer:", error)
                     alert("Failed to save. Please try again.")
+                  } finally {
+                    setIsSavingSendOffer(false)
                   }
                 }
               }}
+              disabled={isSavingSendOffer}
+              aria-busy={isSavingSendOffer}
             >
-              Хадгалах
+              {isSavingSendOffer ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Хадгалж байна...
+                </>
+              ) : (
+                "Хадгалах"
+              )}
             </Button>
             <Button
               variant="outline"
               onClick={handleDownloadSendOfferWord}
+              disabled={isSavingSendOffer}
             >
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
@@ -3072,6 +3071,7 @@ export default function QuotesPage() {
                 if (!mailto) return
                 window.location.href = mailto
               }}
+              disabled={isSavingSendOffer}
             >
               <Mail className="mr-2 h-4 w-4" />
               Mail
@@ -3081,7 +3081,13 @@ export default function QuotesPage() {
       </Dialog>
 
       {/* Create Invoice Form Dialog */}
-      <Dialog open={isCreateInvoiceDialogOpen} onOpenChange={setIsCreateInvoiceDialogOpen}>
+      <Dialog
+        open={isCreateInvoiceDialogOpen}
+        onOpenChange={(open) => {
+          if (isSavingInvoice) return
+          setIsCreateInvoiceDialogOpen(open)
+        }}
+      >
         <DialogContent className="w-[95vw] max-w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>НЭХЭМЖЛЭЛ </DialogTitle>
@@ -3385,13 +3391,18 @@ export default function QuotesPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateInvoiceDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateInvoiceDialogOpen(false)}
+              disabled={isSavingInvoice}
+            >
               Хаах 
             </Button>
             <Button
               onClick={async () => {
                 // Handle save action - update status to create_invoice
                 if (selectedQuote) {
+                  setIsSavingInvoice(true)
                   try {
                     const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
                       const productId = getProductKey(product, index)
@@ -3495,15 +3506,27 @@ export default function QuotesPage() {
                     await fetchQuotes() // Refresh quotes list
                   } catch (error) {
                     console.error("Error saving invoice:", error)
+                  } finally {
+                    setIsSavingInvoice(false)
                   }
                 }
               }}
+              disabled={isSavingInvoice}
+              aria-busy={isSavingInvoice}
             >
-              Хадгалах 
+              {isSavingInvoice ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Хадгалж байна...
+                </>
+              ) : (
+                "Хадгалах"
+              )}
             </Button>
             <Button
               variant="outline"
               onClick={handleDownloadInvoiceWord}
+              disabled={isSavingInvoice}
             >
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
@@ -3515,6 +3538,7 @@ export default function QuotesPage() {
                 if (!mailto) return
                 window.location.href = mailto
               }}
+              disabled={isSavingInvoice}
             >
               <Mail className="mr-2 h-4 w-4" />
               Mail
@@ -3524,7 +3548,13 @@ export default function QuotesPage() {
       </Dialog>
 
       {/* Зарлагын баримт Form Dialog - Expense Receipt */}
-      <Dialog open={isSpentDialogOpen} onOpenChange={setIsSpentDialogOpen}>
+      <Dialog
+        open={isSpentDialogOpen}
+        onOpenChange={(open) => {
+          if (isSavingSpent) return
+          setIsSpentDialogOpen(open)
+        }}
+      >
         <DialogContent className="w-[95vw] max-w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>ЗАРЛАГЫН БАРИМТ</DialogTitle>
@@ -3782,6 +3812,7 @@ export default function QuotesPage() {
             <Button
               variant="outline"
               onClick={handleDownloadSpentWord}
+              disabled={isSavingSpent}
             >
               <FileText className="mr-2 h-4 w-4" />
               Татаж авах
@@ -3793,17 +3824,23 @@ export default function QuotesPage() {
                 if (!mailto) return
                 window.location.href = mailto
               }}
+              disabled={isSavingSpent}
             >
               <Mail className="mr-2 h-4 w-4" />
               Mail
             </Button>
-            <Button variant="outline" onClick={() => setIsSpentDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsSpentDialogOpen(false)}
+              disabled={isSavingSpent}
+            >
               Хаах 
             </Button>
             <Button
               onClick={async () => {
                 // Handle save action - update status to spent
                 if (selectedQuote) {
+                  setIsSavingSpent(true)
                   try {
                     const updatedProducts = selectedQuote.selectedProducts.map((product, index) => {
                       const productId = getProductKey(product, index)
@@ -3955,11 +3992,22 @@ export default function QuotesPage() {
                     await fetchQuotes() // Refresh quotes list
                   } catch (error) {
                     console.error("Error saving spent:", error)
+                  } finally {
+                    setIsSavingSpent(false)
                   }
                 }
               }}
+              disabled={isSavingSpent}
+              aria-busy={isSavingSpent}
             >
-              Хадгалах 
+              {isSavingSpent ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Хадгалж байна...
+                </>
+              ) : (
+                "Хадгалах"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -26,6 +26,17 @@ const parseProductSector = (value: unknown): string[] => {
   return []
 }
 
+const formatProductCode = (value: unknown): string => {
+  if (value === undefined || value === null) return ""
+  const raw = String(value).trim()
+  if (!raw) return ""
+  if (/^BK-\d{7}$/.test(raw)) return raw
+  const digits = raw.match(/\d+/g)?.join("") || ""
+  if (!digits) return ""
+  const normalized = digits.length > 7 ? digits.slice(-7) : digits.padStart(7, "0")
+  return `BK-${normalized}`
+}
+
 // GET - Get a single product by ID
 export async function GET(
   request: NextRequest,
@@ -226,7 +237,7 @@ export async function PUT(
         subcategory: formData.get("subcategory") as string || "",
         product_sector: parseProductSector(productSectorValue),
         model_number: formData.get("model_number") as string || "",
-        product_code: formData.get("product_code") as string || "",
+        product_code: formatProductCode(formData.get("product_code")),
         productTypes: productTypes,
         updatedAt: new Date().toISOString(),
       };
@@ -319,7 +330,7 @@ export async function PUT(
         subcategory: subcategory || "",
         product_sector: parseProductSector(product_sector),
         model_number: model_number || "",
-        product_code: product_code || "",
+        product_code: formatProductCode(product_code),
         brand_image: brand_image || "",
         productTypes: Array.isArray(productTypes) ? productTypes : [],
         images: images || [],

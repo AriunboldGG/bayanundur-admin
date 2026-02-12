@@ -28,8 +28,10 @@ type CompanyInfoItem = {
   address?: string
   company_phone?: string
   company_description?: string
+  delivery_info?: string
   company_image_url?: string
   partners_images?: string[]
+  riim_images?: string[]
   email?: string
   fb?: string
   mobile_phone?: string
@@ -43,6 +45,7 @@ const emptyForm = {
   address: "",
   company_phone: "",
   company_description: "",
+  delivery_info: "",
   email: "",
   fb: "",
   mobile_phone: "",
@@ -67,7 +70,9 @@ export default function CompanyInfoPage() {
   const [companyImageFile, setCompanyImageFile] = useState<File | null>(null)
   const [companyImagePreview, setCompanyImagePreview] = useState("")
   const [partnerImages, setPartnerImages] = useState<PartnerImageItem[]>([])
+  const [riimImages, setRiimImages] = useState<PartnerImageItem[]>([])
   const partnerInputRef = useRef<HTMLInputElement | null>(null)
+  const riimInputRef = useRef<HTMLInputElement | null>(null)
 
   const fetchCompanyInfo = async () => {
     try {
@@ -96,6 +101,7 @@ export default function CompanyInfoPage() {
     setCompanyImageFile(null)
     setCompanyImagePreview("")
     setPartnerImages([])
+    setRiimImages([])
     setIsDialogOpen(true)
   }
 
@@ -105,6 +111,7 @@ export default function CompanyInfoPage() {
       address: item.address || "",
       company_phone: item.company_phone || "",
       company_description: item.company_description || "",
+      delivery_info: item.delivery_info || "",
       email: item.email || "",
       fb: item.fb || "",
       mobile_phone: item.mobile_phone || "",
@@ -114,6 +121,7 @@ export default function CompanyInfoPage() {
     setCompanyImageFile(null)
     setCompanyImagePreview(item.company_image_url || "")
     setPartnerImages((item.partners_images || []).map((url) => ({ url })))
+    setRiimImages((item.riim_images || []).map((url) => ({ url })))
     setIsDialogOpen(true)
   }
 
@@ -165,6 +173,42 @@ export default function CompanyInfoPage() {
     })
   }
 
+  const handleRiimImagesSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files) return
+    const newItems: PartnerImageItem[] = []
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const preview = URL.createObjectURL(file)
+        newItems.push({ url: preview, file })
+      }
+    })
+    if (newItems.length) {
+      setRiimImages((prev) => {
+        const remaining = Math.max(0, 3 - prev.length)
+        if (remaining === 0) return prev
+        const limited = newItems.slice(0, remaining)
+        if (limited.length < newItems.length) {
+          alert("Show room images хамгийн ихдээ 3 байна.")
+        }
+        return [...prev, ...limited]
+      })
+    }
+    event.target.value = ""
+  }
+
+  const handleRemoveRiimImage = (index: number) => {
+    setRiimImages((prev) => {
+      const updated = [...prev]
+      const removed = updated[index]
+      if (removed?.url && removed.url.startsWith("blob:")) {
+        URL.revokeObjectURL(removed.url)
+      }
+      updated.splice(index, 1)
+      return updated
+    })
+  }
+
   const handleSave = async () => {
     setIsSaving(true)
     try {
@@ -174,6 +218,7 @@ export default function CompanyInfoPage() {
       payload.append("address", formData.address)
       payload.append("company_phone", formData.company_phone)
       payload.append("company_description", formData.company_description)
+      payload.append("delivery_info", formData.delivery_info)
       payload.append("email", formData.email)
       payload.append("fb", formData.fb)
       payload.append("mobile_phone", formData.mobile_phone)
@@ -191,6 +236,14 @@ export default function CompanyInfoPage() {
       partnerImages.forEach((item) => {
         if (item.file) {
           payload.append("partners_images", item.file)
+        }
+      })
+
+      const existingRiim = riimImages.filter((item) => !item.file).map((item) => item.url)
+      payload.append("riim_existing", JSON.stringify(existingRiim))
+      riimImages.forEach((item) => {
+        if (item.file) {
+          payload.append("riim_images", item.file)
         }
       })
 
@@ -212,9 +265,15 @@ export default function CompanyInfoPage() {
           URL.revokeObjectURL(item.url)
         }
       })
+      riimImages.forEach((item) => {
+        if (item.url.startsWith("blob:")) {
+          URL.revokeObjectURL(item.url)
+        }
+      })
       setCompanyImageFile(null)
       setCompanyImagePreview("")
       setPartnerImages([])
+      setRiimImages([])
       await fetchCompanyInfo()
     } catch (err: any) {
       alert(err?.message || "Failed to save company info")
@@ -275,7 +334,8 @@ export default function CompanyInfoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Address</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead className="min-w-[360px]">Description</TableHead>
+                    <TableHead className="min-w-[260px]">Хүргэлтийн мэдээлэл</TableHead>
                     <TableHead>Company Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Facebook</TableHead>
@@ -284,6 +344,7 @@ export default function CompanyInfoPage() {
                     <TableHead>WhatsApp</TableHead>
                     <TableHead>Image</TableHead>
                     <TableHead>Partners</TableHead>
+                    <TableHead>Show room images</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -291,7 +352,12 @@ export default function CompanyInfoPage() {
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="min-w-[200px]">{item.address || "-"}</TableCell>
-                      <TableCell className="min-w-[200px]">{item.company_description || "-"}</TableCell>
+                      <TableCell className="min-w-[360px]">
+                        <div className="max-w-[520px] overflow-x-auto whitespace-nowrap">
+                          {item.company_description || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="min-w-[260px]">{item.delivery_info || "-"}</TableCell>
                       <TableCell>{item.company_phone || "-"}</TableCell>
                       <TableCell>{item.email || "-"}</TableCell>
                       <TableCell>{item.fb || "-"}</TableCell>
@@ -310,6 +376,7 @@ export default function CompanyInfoPage() {
                         )}
                       </TableCell>
                       <TableCell>{item.partners_images?.length ?? 0}</TableCell>
+                      <TableCell>{item.riim_images?.length ?? 0}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -370,6 +437,16 @@ export default function CompanyInfoPage() {
                 onChange={(event) => setFormData({ ...formData, company_description: event.target.value })}
                 placeholder="Company description"
                 className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="delivery_info">Хүргэлтийн мэдээлэл</Label>
+              <textarea
+                id="delivery_info"
+                value={formData.delivery_info}
+                onChange={(event) => setFormData({ ...formData, delivery_info: event.target.value })}
+                placeholder="Хүргэлтийн мэдээлэл"
+                className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
             <div className="space-y-2">
@@ -512,6 +589,66 @@ export default function CompanyInfoPage() {
                         <button
                           type="button"
                           onClick={() => handleRemovePartnerImage(index)}
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Show room images (max 3)</Label>
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <input
+                    type="file"
+                    id="riim-images-upload"
+                    accept="image/*"
+                    multiple
+                    onChange={handleRiimImagesSelect}
+                    className="hidden"
+                    ref={riimInputRef}
+                    disabled={riimImages.length >= 3}
+                  />
+                  <label
+                    htmlFor="riim-images-upload"
+                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                      riimImages.length >= 3
+                        ? "border-muted-foreground/25 bg-muted/50 cursor-not-allowed"
+                        : "border-primary/50 bg-muted/30 hover:bg-muted/50"
+                    }`}
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {riimImages.length > 0
+                        ? `${riimImages.length} зураг сонгогдсон`
+                        : "Зураг сонгох (Click to select images)"}
+                    </p>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => riimInputRef.current?.click()}
+                    disabled={riimImages.length >= 3}
+                  >
+                    Add Show room images
+                  </Button>
+                </div>
+                {riimImages.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {riimImages.map((item, index) => (
+                      <div key={`${item.url}-${index}`} className="relative group">
+                        <img
+                          src={item.url}
+                          alt={`Riim ${index + 1}`}
+                          className="h-24 w-full rounded-md object-cover border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRiimImage(index)}
                           className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <XCircle className="h-4 w-4" />

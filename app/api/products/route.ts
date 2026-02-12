@@ -27,6 +27,30 @@ const parseProductSector = (value: unknown): string[] => {
   return []
 }
 
+const formatProductCode = (value: unknown): string => {
+  if (value === undefined || value === null) return ""
+  const raw = String(value).trim()
+  if (!raw) return ""
+  if (/^BK-\d{7}$/.test(raw)) return raw
+  const digits = raw.match(/\d+/g)?.join("") || ""
+  if (!digits) return ""
+  const normalized = digits.length > 7 ? digits.slice(-7) : digits.padStart(7, "0")
+  return `BK-${normalized}`
+}
+
+const getNextProductCode = async (): Promise<string> => {
+  const counterRef = db.collection("counters").doc("product_code")
+
+  return db.runTransaction(async (transaction) => {
+    const counterSnap = await transaction.get(counterRef)
+    let current = counterSnap.exists ? Number(counterSnap.data()?.current || 0) : 0
+
+    const next = current + 1
+    transaction.set(counterRef, { current: next }, { merge: true })
+    return `BK-${String(next).padStart(7, "0")}`
+  })
+}
+
 // GET - Fetch all products (with optional filters)
 export async function GET(request: NextRequest) {
   try {
@@ -227,7 +251,7 @@ export async function POST(request: NextRequest) {
         subcategory: formData.get("subcategory") as string || "",
         product_sector: parseProductSector(productSectorValue),
         model_number: formData.get("model_number") as string || "",
-        product_code: formData.get("product_code") as string || "",
+        product_code: formatProductCode(formData.get("product_code")),
         productTypes: productTypes,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -308,7 +332,7 @@ export async function POST(request: NextRequest) {
         subcategory: subcategory || "",
         product_sector: parseProductSector(product_sector),
         model_number: model_number || "",
-        product_code: product_code || "",
+        product_code: formatProductCode(product_code),
         brand_image: brand_image || "",
         productTypes: Array.isArray(productTypes) ? productTypes : [],
         images: images || [],
@@ -321,6 +345,7 @@ export async function POST(request: NextRequest) {
       delete productData.sale_price
     }
 
+    productData.product_code = await getNextProductCode()
     const docRef = await db.collection("products").add(productData);
 
     return NextResponse.json({
