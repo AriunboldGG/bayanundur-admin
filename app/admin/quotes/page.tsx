@@ -1272,7 +1272,7 @@ export default function QuotesPage() {
               new DocxTableRow({
                 children: [
                   new DocxTableCell({
-                    children: [new Paragraph({ children: [new TextRun({ text: "Тэмдэг", bold: true })] })],
+                    children: [new Paragraph({ children: [new TextRun({ text: "Тамга", bold: true })] })],
                     width: { size: 30, type: WidthType.PERCENTAGE },
                   }),
                   new DocxTableCell({
@@ -1616,7 +1616,7 @@ export default function QuotesPage() {
               new DocxTableRow({
                 children: [
                   new DocxTableCell({
-                    children: [new Paragraph({ children: [new TextRun({ text: "Тэмдэг", bold: true })] })],
+                    children: [new Paragraph({ children: [new TextRun({ text: "Тамга", bold: true })] })],
                     width: { size: 30, type: WidthType.PERCENTAGE },
                   }),
                   new DocxTableCell({
@@ -1942,8 +1942,8 @@ export default function QuotesPage() {
                       new Paragraph({
                         spacing: { line: 360, lineRule: LineRuleType.AUTO },
                         children: [
-                          new TextRun({ text: "Нягтлан бодогч ", bold: true }),
-                          new TextRun({ text: "................................ / ............................/" }),
+                          new TextRun({ text: "Шалгасан нягтлан бодогч ", bold: true }),
+                          new TextRun({ text: "............................/ ......................../" }),
                         ],
                       }),
                     ],
