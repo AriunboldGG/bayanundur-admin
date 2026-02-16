@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select"
 import { Eye, CheckCircle, XCircle, Download, FileDown, FileText, Trash2, Mail, Loader2 } from "lucide-react"
 import { PriceQuote } from "@/lib/types"
-import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType, BorderStyle } from "docx"
+import { Document, Packer, Paragraph, TextRun, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, AlignmentType, BorderStyle, LineRuleType } from "docx"
 import { saveAs } from "file-saver"
 
 // Mock data removed - now fetching from Firebase
@@ -1259,7 +1259,6 @@ export default function QuotesPage() {
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
-          // Stamp and Signature Section
           new DocxTable({
             borders: {
               top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -1273,12 +1272,20 @@ export default function QuotesPage() {
               new DocxTableRow({
                 children: [
                   new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
-                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: "Тэмдэг", bold: true })] })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Нягтлан бодогч ", bold: true }),
+                          new TextRun({ text: ".................................. / ........................... /" }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
@@ -1596,7 +1603,6 @@ export default function QuotesPage() {
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
-          // Stamp and Signature Section
           new DocxTable({
             borders: {
               top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -1610,12 +1616,27 @@ export default function QuotesPage() {
               new DocxTableRow({
                 children: [
                   new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
-                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: "Тэмдэг", bold: true })] })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Захирал ", bold: true }),
+                          new TextRun({ text: ".................................. / ........................... /" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Нягтлан бодогч ", bold: true }),
+                          new TextRun({ text: ".................................. / ........................... /" }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
@@ -1886,7 +1907,6 @@ export default function QuotesPage() {
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
           new Paragraph({ text: "" }),
-          // Stamp and Signature Section
           new DocxTable({
             borders: {
               top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -1900,12 +1920,34 @@ export default function QuotesPage() {
               new DocxTableRow({
                 children: [
                   new DocxTableCell({
-                    children: [new Paragraph({
-                      children: [
-                        new TextRun({ text: "Нягтлан бодогч: ", bold: true }),
-                      ],
-                    })],
-                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: "Тэмдэг", bold: true })] })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new DocxTableCell({
+                    children: [
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Хүлээлгэн өгсөн эд хариуцагч ", bold: true }),
+                          new TextRun({ text: "......................./ ......................./" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Хүлээн авагч ", bold: true }),
+                          new TextRun({ text: "................................ / ............................ /" }),
+                        ],
+                      }),
+                      new Paragraph({
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO },
+                        children: [
+                          new TextRun({ text: "Нягтлан бодогч ", bold: true }),
+                          new TextRun({ text: "................................ / ............................/" }),
+                        ],
+                      }),
+                    ],
+                    width: { size: 70, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
